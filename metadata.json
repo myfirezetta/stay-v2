@@ -1,0 +1,8 @@
+{
+  "name": "Remix: LuxeStay",
+  "description": "LuxeStay is a premium accommodation booking platform designed for the discerning traveler.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
