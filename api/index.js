@@ -1,11 +1,15 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
-const postgres = require('postgres');
-const multer = require('multer');
-const path = require('path');
-const bcrypt = require('bcryptjs');
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import postgres from 'postgres';
+import multer from 'multer';
+import path from 'path';
+import bcrypt from 'bcryptjs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -723,5 +727,5 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`Server is running on port ${PORT}`);
   });
 }
-module.exports = app;
+export default app;
 
