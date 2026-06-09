@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Geist", "Inter", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", monospace;
+  
+  --color-zinc-950: #09090b;
+  --color-zinc-900: #18181b;
+  --color-zinc-800: #27272a;
+  --color-zinc-100: #f4f4f5;
+  --color-zinc-50: #fafafa;
+}
+
+:root {
+  /* SymboFlow Tag Colors (Light) */
+  --color-project-bg: #e0f2fe;
+  --color-project-text: #0369a1;
+  --color-task-bg: #fef3c7;
+  --color-task-text: #b45309;
+  --color-ticket-bg: #fee2e2;
+  --color-ticket-text: #b91c1c;
+  --color-system-bg: #f3e8ff;
+  --color-system-text: #7e22ce;
+  --color-user-bg: #dcfce7;
+  --color-user-text: #15803d;
+  --color-group-bg: #ffedd5;
+  --color-group-text: #c2410c;
+  --color-dept-bg: #e0e7ff;
+  --color-dept-text: #4338ca;
+  --color-milestone-bg: #fce7f3;
+  --color-milestone-text: #be185d;
+  --color-date-bg: #f1f5f9;
+  --color-date-text: #334155;
+  --color-neutral-bg: #f3f4f6;
+  --color-neutral-text: #374151;
+}
+
+[data-theme="dark"] {
+  /* SymboFlow Tag Colors (Dark) */
+  --color-project-bg: rgba(3, 105, 161, 0.2);
+  --color-project-text: #7dd3fc;
+  --color-task-bg: rgba(180, 83, 9, 0.2);
+  --color-task-text: #fcd34d;
+  --color-ticket-bg: rgba(185, 28, 28, 0.2);
+  --color-ticket-text: #fca5a5;
+  --color-system-bg: rgba(126, 34, 206, 0.2);
+  --color-system-text: #d8b4fe;
+  --color-user-bg: rgba(21, 128, 61, 0.2);
+  --color-user-text: #86efac;
+  --color-group-bg: rgba(194, 65, 12, 0.2);
+  --color-group-text: #fdba74;
+  --color-dept-bg: rgba(67, 56, 202, 0.2);
+  --color-dept-text: #a5b4fc;
+  --color-milestone-bg: rgba(190, 24, 93, 0.2);
+  --color-milestone-text: #f9a8d4;
+  --color-date-bg: rgba(51, 65, 85, 0.4);
+  --color-date-text: #cbd5e1;
+  --color-neutral-bg: rgba(55, 65, 81, 0.4);
+  --color-neutral-text: #d1d5db;
+}
+
+@layer base {
+  body {
+    @apply bg-white text-zinc-950 font-sans antialiased;
+  }
+  [data-theme="dark"] body {
+    @apply bg-zinc-950 text-zinc-50;
+  }
+}
