@@ -2,7 +2,7 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
-import postgres from 'postgres';
+import { createClient } from '@supabase/supabase-js';
 import multer from 'multer';
 import path from 'path';
 import bcrypt from 'bcryptjs';
@@ -35,19 +35,17 @@ const io = new Server(server, {
   }
 });
 
-
-const sql = postgres('postgresql://postgres.tsavzxmdqgccftrddeph:SXmLBY57do4tp2kqx1@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres', {
-  ssl: 'require'
-});
-
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://tsavzxmdqgccftrddeph.supabase.co';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_aw4lQy8u_x-Ac7vDUnLHfA_MU4i3VUA';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function getUserAuth(req) {
   const userId = req.headers['x-user-id'];
   if (!userId) return { id: 1, role: 'Admin' }; // Fallback
   
-  const result = await sql`SELECT Id, Role FROM Users WHERE Id = ${userId}`;
-  if (result.length > 0) {
-    return { id: result[0].Id, role: result[0].Role };
+  const { data, error } = await supabase.from('Users').select('Id, Role').eq('Id', userId);
+  if (data && data.length > 0) {
+    return { id: data[0].Id, role: data[0].Role };
   }
   return { id: parseInt(userId), role: 'Member' };
 }
@@ -56,23 +54,25 @@ async function getUserAuth(req) {
 app.get('/api/feed', async (req, res) => {
   try {
     const auth = await getUserAuth(req);
-    const result = await sql`SELECT * FROM Feed ORDER BY CreatedAt ASC`;
-    let allItems = result;
+    const { data: allItems, error } = await supabase.from('Feed').select('*').order('CreatedAt', { ascending: true });
+    if (error) throw error;
+    
+    let filteredItems = allItems;
     
     // Filter for Members
     if (auth.role !== 'Admin') {
-      const allowedProjectsResult = await sql`SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id}`;
-      const allowedProjectIds = allowedProjectsResult.map(r => r.ProjectId);
+      const { data: upData } = await supabase.from('UserProjects').select('ProjectId').eq('UserId', auth.id);
+      const allowedProjectIds = (upData || []).map(r => r.ProjectId);
       
-      const allowedTasksResult = await sql`SELECT Id FROM Tasks WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id})`;
-      const allowedTaskIds = allowedTasksResult.map(r => r.Id);
+      const { data: tasksData } = await supabase.from('Tasks').select('Id').in('ProjectId', allowedProjectIds.length ? allowedProjectIds : [0]);
+      const allowedTaskIds = (tasksData || []).map(r => r.Id);
 
-      const allowedTicketsResult = await sql`SELECT Id FROM Tickets WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id}) OR TaskId IN (SELECT Id FROM Tasks WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id}))`;
-      const allowedTicketIds = allowedTicketsResult.map(r => r.Id);
+      const { data: ticketsData1 } = await supabase.from('Tickets').select('Id').in('ProjectId', allowedProjectIds.length ? allowedProjectIds : [0]);
+      const { data: ticketsData2 } = await supabase.from('Tickets').select('Id').in('TaskId', allowedTaskIds.length ? allowedTaskIds : [0]);
+      const allowedTicketIds = [...(ticketsData1 || []).map(r=>r.Id), ...(ticketsData2 || []).map(r=>r.Id)];
       
-      allItems = allItems.filter(item => {
+      filteredItems = allItems.filter(item => {
         if (item.AuthorId === auth.id) return true;
-        
         try {
           const tags = JSON.parse(item.ParsedTags || '[]');
           for (let tag of tags) {
@@ -82,14 +82,12 @@ app.get('/api/feed', async (req, res) => {
             if (tag.type === 'ticket' && allowedTicketIds.includes(parseInt(tag.id))) return true;
           }
         } catch (e) {}
-        
         return false;
       });
     }
 
-    // Structure into parents and replies
-    const posts = allItems.filter(i => !i.ParentId).sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));
-    const replies = allItems.filter(i => i.ParentId);
+    const posts = filteredItems.filter(i => !i.ParentId).sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));
+    const replies = filteredItems.filter(i => i.ParentId);
     
     const formattedPosts = posts.map(post => ({
       ...post,
@@ -97,41 +95,28 @@ app.get('/api/feed', async (req, res) => {
     }));
     
     res.json(formattedPosts);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 app.patch('/api/feed/:id', async (req, res) => {
   try {
-    const feedId = req.params.id;
     const { content, parsedTags } = req.body;
-    const result = await sql`
-      UPDATE Feed 
-      SET Content = ${content}, ParsedTags = ${JSON.stringify(parsedTags)}
-      RETURNING *
-      WHERE Id = ${feedId}
-    `;
-    if (result.length === 0) return res.status(404).send('Feed not found');
-    io.emit('feed_updated', result[0]);
-    res.json(result[0]);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+    const { data, error } = await supabase.from('Feed').update({ Content: content, ParsedTags: JSON.stringify(parsedTags) }).eq('Id', req.params.id).select();
+    if (error) throw error;
+    if (!data || data.length === 0) return res.status(404).send('Feed not found');
+    io.emit('feed_updated', data[0]);
+    res.json(data[0]);
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 app.delete('/api/feed/:id', async (req, res) => {
   try {
-    const feedId = req.params.id;
-    const result = await sql`
-      DELETE FROM Feed RETURNING Id WHERE Id = ${feedId}
-    `;
-    if (result.length === 0) return res.status(404).send('Feed not found');
-    io.emit('feed_deleted', feedId);
+    const { data, error } = await supabase.from('Feed').delete().eq('Id', req.params.id).select();
+    if (error) throw error;
+    if (!data || data.length === 0) return res.status(404).send('Feed not found');
+    io.emit('feed_deleted', req.params.id);
     res.json({ success: true });
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 // LOOKUP
@@ -141,146 +126,123 @@ app.get('/api/lookup', async (req, res) => {
     let projects, tasks, tickets, milestones, systems;
     
     if (auth.role === 'Admin') {
-      projects = await sql`SELECT Id as id, Name as name FROM Projects`;
-      tasks = await sql`SELECT Id as id, Title as title FROM Tasks`;
-      tickets = await sql`SELECT Id as id, Title as title FROM Tickets`;
-      milestones = await sql`SELECT Id as id, Title as title FROM Milestones`;
-      systems = await sql`SELECT Id as id, Name as name FROM Systems`;
+      const p = await supabase.from('Projects').select('Id, Name'); projects = p.data;
+      const t = await supabase.from('Tasks').select('Id, Title'); tasks = t.data;
+      const tk = await supabase.from('Tickets').select('Id, Title'); tickets = tk.data;
+      const m = await supabase.from('Milestones').select('Id, Title'); milestones = m.data;
+      const s = await supabase.from('Systems').select('Id, Name'); systems = s.data;
     } else {
-      projects = await sql`SELECT Id as id, Name as name FROM Projects WHERE Id IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id})`;
-      tasks = await sql`SELECT Id as id, Title as title FROM Tasks WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id})`;
-      tickets = await sql`SELECT Id as id, Title as title FROM Tickets WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id}) OR TaskId IN (SELECT Id FROM Tasks WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id}))`;
-      milestones = await sql`SELECT Id as id, Title as title FROM Milestones WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id})`;
-      systems = await sql`SELECT Id as id, Name as name FROM Systems WHERE Id IN (SELECT SystemId FROM ProjectSystems WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id}))`;
+      const { data: up } = await supabase.from('UserProjects').select('ProjectId').eq('UserId', auth.id);
+      const pIds = (up || []).map(r => r.ProjectId);
+      
+      const p = await supabase.from('Projects').select('Id, Name').in('Id', pIds.length ? pIds : [0]); projects = p.data;
+      const t = await supabase.from('Tasks').select('Id, Title').in('ProjectId', pIds.length ? pIds : [0]); tasks = t.data;
+      const tIds = (tasks || []).map(r => r.Id);
+      
+      const tk1 = await supabase.from('Tickets').select('Id, Title').in('ProjectId', pIds.length ? pIds : [0]);
+      const tk2 = await supabase.from('Tickets').select('Id, Title').in('TaskId', tIds.length ? tIds : [0]);
+      tickets = [...(tk1.data || []), ...(tk2.data || [])];
+      
+      const m = await supabase.from('Milestones').select('Id, Title').in('ProjectId', pIds.length ? pIds : [0]); milestones = m.data;
+      
+      const { data: ps } = await supabase.from('ProjectSystems').select('SystemId').in('ProjectId', pIds.length ? pIds : [0]);
+      const sysIds = (ps || []).map(r => r.SystemId);
+      const s = await supabase.from('Systems').select('Id, Name').in('Id', sysIds.length ? sysIds : [0]); systems = s.data;
     }
     
-    // Globals
-    const users = await sql`SELECT Id as id, DisplayName as name FROM Users`;
-    const groups = await sql`SELECT Id as id, Name as name FROM Groups`;
-    const departments = await sql`SELECT Id as id, Name as name FROM Departments`;
+    const { data: users } = await supabase.from('Users').select('Id, DisplayName');
+    const { data: groups } = await supabase.from('Groups').select('Id, Name');
+    const { data: departments } = await supabase.from('Departments').select('Id, Name');
     
     res.json({
-      projects: projects,
-      tasks: tasks,
-      tickets: tickets,
-      users: users,
-      milestones: milestones,
-      systems: systems,
-      groups: groups,
-      departments: departments
+      projects: projects?.map(i => ({id: i.Id, name: i.Name})) || [],
+      tasks: tasks?.map(i => ({id: i.Id, title: i.Title})) || [],
+      tickets: tickets?.map(i => ({id: i.Id, title: i.Title})) || [],
+      users: users?.map(i => ({id: i.Id, name: i.DisplayName})) || [],
+      milestones: milestones?.map(i => ({id: i.Id, title: i.Title})) || [],
+      systems: systems?.map(i => ({id: i.Id, name: i.Name})) || [],
+      groups: groups?.map(i => ({id: i.Id, name: i.Name})) || [],
+      departments: departments?.map(i => ({id: i.Id, name: i.Name})) || []
     });
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 // USERS & AUTH
 app.get('/api/users', async (req, res) => {
   try {
-    const result = await sql`SELECT Id, DisplayName, Email, Role, Status, Description, CreatedAt FROM Users ORDER BY CreatedAt DESC`;
-    res.json(result);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+    const { data, error } = await supabase.from('Users').select('Id, DisplayName, Email, Role, Status, Description, CreatedAt').order('CreatedAt', { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    const result = await sql`SELECT Id, DisplayName, Email, Role, PasswordHash, RequiresPasswordChange FROM Users WHERE Email = ${email}`;
-    if (result.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
+    const { data, error } = await supabase.from('Users').select('Id, DisplayName, Email, Role, PasswordHash, RequiresPasswordChange').eq('Email', email);
+    if (error) throw error;
+    if (!data || data.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
     
-    const user = result[0];
-    
-    // Fallback for existing users without password setup (or if password not provided and it's a legacy login)
-    // To enforce new flow, we demand password matching.
-    if (!user.PasswordHash) {
-      // If they don't have a password yet, we let them login but force them to set one.
-      return res.json({ id: user.Id, displayName: user.DisplayName, email: user.Email, role: user.Role, requiresPasswordChange: true });
-    }
+    const user = data[0];
+    if (!user.PasswordHash) return res.json({ id: user.Id, displayName: user.DisplayName, email: user.Email, role: user.Role, requiresPasswordChange: true });
 
     const isValid = await bcrypt.compare(password, user.PasswordHash);
     if (!isValid) return res.status(401).json({ error: 'Invalid email or password' });
 
-    res.json({ 
-      id: user.Id, 
-      displayName: user.DisplayName, 
-      email: user.Email, 
-      role: user.Role, 
-      requiresPasswordChange: user.RequiresPasswordChange 
-    });
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+    res.json({ id: user.Id, displayName: user.DisplayName, email: user.Email, role: user.Role, requiresPasswordChange: user.RequiresPasswordChange });
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 app.post('/api/auth/change-password', async (req, res) => {
   try {
     const { userId, newPassword } = req.body;
     const hash = await bcrypt.hash(newPassword, 10);
-    const result = await sql`
-      UPDATE Users 
-      SET PasswordHash = ${hash}, RequiresPasswordChange = 0
-      RETURNING * 
-      WHERE Id = ${userId}
-    `;
-    if (result.length === 0) return res.status(404).json({ error: 'User not found' });
-    const user = result[0];
-    res.json({ id: user.Id, displayName: user.DisplayName, email: user.Email, role: user.Role, requiresPasswordChange: false });
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+    const { data, error } = await supabase.from('Users').update({ PasswordHash: hash, RequiresPasswordChange: 0 }).eq('Id', userId).select();
+    if (error) throw error;
+    if (!data || data.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ id: data[0].Id, displayName: data[0].DisplayName, email: data[0].Email, role: data[0].Role, requiresPasswordChange: false });
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 app.post('/api/users', async (req, res) => {
   try {
     const { displayName, email, role, status, description } = req.body;
-    
-    // Generate default password: Password123!
-    const defaultPassword = 'Password123!';
-    const hash = await bcrypt.hash(defaultPassword, 10);
-
-    const result = await sql`
-      INSERT INTO Users (DisplayName, Email, Role, Status, Description, PasswordHash, RequiresPasswordChange) 
-      RETURNING *
-      VALUES (${displayName}, ${email}, ${role || 'Member'}, ${status || 'Active'}, ${description || ''}, ${hash}, 1)
-    `;
+    const hash = await bcrypt.hash('Password123!', 10);
+    const { data, error } = await supabase.from('Users').insert({ DisplayName: displayName, Email: email, Role: role || 'Member', Status: status || 'Active', Description: description || '', PasswordHash: hash, RequiresPasswordChange: 1 }).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+    res.json(data[0]);
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 app.patch('/api/users/:id', async (req, res) => {
   try {
     const { displayName, email, role, status, description } = req.body;
-    const result = await sql`
-      UPDATE Users SET DisplayName = ${displayName}, Email = ${email}, Role = ${role}, Status = ${status}, Description = ${description}
-      RETURNING * WHERE Id = ${req.params.id}
-    `;
+    const { data, error } = await supabase.from('Users').update({ DisplayName: displayName, Email: email, Role: role, Status: status, Description: description }).eq('Id', req.params.id).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
-// CRUD FOR ENTITIES
 // Projects
 app.get('/api/projects', async (req, res) => {
   try {
     const auth = await getUserAuth(req);
     let result;
     if (auth.role === 'Admin') {
-      result = await sql`SELECT * FROM Projects ORDER BY CreatedAt DESC`;
+      const { data, error } = await supabase.from('Projects').select('*').order('CreatedAt', { ascending: false });
+      if (error) throw error; result = data;
     } else {
-      result = await sql`SELECT * FROM Projects WHERE Id IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id}) ORDER BY CreatedAt DESC`;
+      const { data: up } = await supabase.from('UserProjects').select('ProjectId').eq('UserId', auth.id);
+      const pIds = (up || []).map(r => r.ProjectId);
+      const { data, error } = await supabase.from('Projects').select('*').in('Id', pIds.length ? pIds : [0]).order('CreatedAt', { ascending: false });
+      if (error) throw error; result = data;
     }
-    // Fetch project systems
-    const systemsRes = await sql`SELECT ProjectId, SystemId FROM ProjectSystems`;
-    
+    const { data: systemsRes } = await supabase.from('ProjectSystems').select('ProjectId, SystemId');
     const projects = result.map(p => ({
       ...p,
-      systemIds: systemsRes.filter(ps => ps.ProjectId === p.Id).map(ps => ps.SystemId)
+      systemIds: (systemsRes || []).filter(ps => ps.ProjectId === p.Id).map(ps => ps.SystemId)
     }));
     res.json(projects);
   } catch (err) { res.status(500).send(err.message); }
@@ -289,17 +251,13 @@ app.get('/api/projects', async (req, res) => {
 app.post('/api/projects', async (req, res) => {
   try {
     const { name, description, systemIds } = req.body;
-    const result = await sql`
-      INSERT INTO Projects (Name, Description) 
-      RETURNING *
-      VALUES (${name}, ${description})
-    `;
-    const newProject = result[0];
+    const { data, error } = await supabase.from('Projects').insert({ Name: name, Description: description }).select();
+    if (error) throw error;
+    const newProject = data[0];
     
     if (systemIds && systemIds.length > 0) {
-      for (let sysId of systemIds) {
-        await sql`INSERT INTO ProjectSystems (ProjectId, SystemId) VALUES (${newProject.Id}, ${sysId})`;
-      }
+      const inserts = systemIds.map(sysId => ({ ProjectId: newProject.Id, SystemId: sysId }));
+      await supabase.from('ProjectSystems').insert(inserts);
     }
     newProject.systemIds = systemIds || [];
     io.emit('db_updated');
@@ -311,17 +269,15 @@ app.patch('/api/projects/:id', async (req, res) => {
   try {
     const { name, description, systemIds } = req.body;
     const pId = req.params.id;
-    const result = await sql`
-      UPDATE Projects SET Name = ${name}, Description = ${description}
-      RETURNING * WHERE Id = ${pId}
-    `;
-    await sql`DELETE FROM ProjectSystems WHERE ProjectId = ${pId}`;
+    const { data, error } = await supabase.from('Projects').update({ Name: name, Description: description }).eq('Id', pId).select();
+    if (error) throw error;
+    
+    await supabase.from('ProjectSystems').delete().eq('ProjectId', pId);
     if (systemIds && systemIds.length > 0) {
-      for (let sysId of systemIds) {
-        await sql`INSERT INTO ProjectSystems (ProjectId, SystemId) VALUES (${pId}, ${sysId})`;
-      }
+      const inserts = systemIds.map(sysId => ({ ProjectId: pId, SystemId: sysId }));
+      await supabase.from('ProjectSystems').insert(inserts);
     }
-    const updated = result[0];
+    const updated = data[0];
     updated.systemIds = systemIds || [];
     io.emit('db_updated');
     res.json(updated);
@@ -331,12 +287,11 @@ app.patch('/api/projects/:id', async (req, res) => {
 app.delete('/api/projects/:id', async (req, res) => {
   try {
     const pId = req.params.id;
-    await sql`DELETE FROM ProjectSystems WHERE ProjectId = ${pId}`;
-    // delete tickets, tasks, milestones associated
-    await sql`DELETE FROM Tickets WHERE ProjectId = ${pId}`;
-    await sql`DELETE FROM Tasks WHERE ProjectId = ${pId}`;
-    await sql`DELETE FROM Milestones WHERE ProjectId = ${pId}`;
-    await sql`DELETE FROM Projects WHERE Id = ${pId}`;
+    await supabase.from('ProjectSystems').delete().eq('ProjectId', pId);
+    await supabase.from('Tickets').delete().eq('ProjectId', pId);
+    await supabase.from('Tasks').delete().eq('ProjectId', pId);
+    await supabase.from('Milestones').delete().eq('ProjectId', pId);
+    await supabase.from('Projects').delete().eq('Id', pId);
     io.emit('db_updated');
     res.json({ success: true });
   } catch (err) { res.status(500).send(err.message); }
@@ -345,40 +300,37 @@ app.delete('/api/projects/:id', async (req, res) => {
 // Systems
 app.get('/api/systems', async (req, res) => {
   try {
-    const result = await sql`SELECT * FROM Systems ORDER BY CreatedAt DESC`;
-    res.json(result);
+    const { data, error } = await supabase.from('Systems').select('*').order('CreatedAt', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.post('/api/systems', async (req, res) => {
   try {
     const { name, description, status } = req.body;
-    const result = await sql`
-      INSERT INTO Systems (Name, Description, Status) 
-      RETURNING * VALUES (${name}, ${description}, ${status || 'Active'})
-    `;
+    const { data, error } = await supabase.from('Systems').insert({ Name: name, Description: description, Status: status || 'Active' }).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.patch('/api/systems/:id', async (req, res) => {
   try {
     const { name, description, status } = req.body;
-    const result = await sql`
-      UPDATE Systems SET Name=${name}, Description=${description}, Status=${status}
-      RETURNING * WHERE Id=${req.params.id}
-    `;
+    const { data, error } = await supabase.from('Systems').update({ Name: name, Description: description, Status: status }).eq('Id', req.params.id).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.delete('/api/systems/:id', async (req, res) => {
   try {
-    await sql`DELETE FROM ProjectSystems WHERE SystemId=${req.params.id}`;
-    await sql`DELETE FROM Tickets WHERE SystemId=${req.params.id}`;
-    await sql`DELETE FROM Systems WHERE Id=${req.params.id}`;
+    await supabase.from('ProjectSystems').delete().eq('SystemId', req.params.id);
+    await supabase.from('Tickets').delete().eq('SystemId', req.params.id);
+    await supabase.from('Systems').delete().eq('Id', req.params.id);
     io.emit('db_updated');
     res.json({ success: true });
   } catch (err) { res.status(500).send(err.message); }
@@ -387,39 +339,36 @@ app.delete('/api/systems/:id', async (req, res) => {
 // Milestones
 app.get('/api/milestones', async (req, res) => {
   try {
-    const result = await sql`SELECT * FROM Milestones ORDER BY TargetDate ASC`;
-    res.json(result);
+    const { data, error } = await supabase.from('Milestones').select('*').order('TargetDate', { ascending: true });
+    if (error) throw error;
+    res.json(data);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.post('/api/milestones', async (req, res) => {
   try {
     const { title, projectId, type, targetDate } = req.body;
-    const result = await sql`
-      INSERT INTO Milestones (Title, ProjectId, Type, TargetDate) 
-      RETURNING * VALUES (${title}, ${projectId}, ${type}, ${targetDate})
-    `;
+    const { data, error } = await supabase.from('Milestones').insert({ Title: title, ProjectId: projectId, Type: type, TargetDate: targetDate }).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.patch('/api/milestones/:id', async (req, res) => {
   try {
     const { title, projectId, type, targetDate } = req.body;
-    const result = await sql`
-      UPDATE Milestones SET Title=${title}, ProjectId=${projectId}, Type=${type}, TargetDate=${targetDate}
-      RETURNING * WHERE Id=${req.params.id}
-    `;
+    const { data, error } = await supabase.from('Milestones').update({ Title: title, ProjectId: projectId, Type: type, TargetDate: targetDate }).eq('Id', req.params.id).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.delete('/api/milestones/:id', async (req, res) => {
   try {
-    await sql`UPDATE Tasks SET MilestoneId=NULL WHERE MilestoneId=${req.params.id}`;
-    await sql`DELETE FROM Milestones WHERE Id=${req.params.id}`;
+    await supabase.from('Tasks').update({ MilestoneId: null }).eq('MilestoneId', req.params.id);
+    await supabase.from('Milestones').delete().eq('Id', req.params.id);
     io.emit('db_updated');
     res.json({ success: true });
   } catch (err) { res.status(500).send(err.message); }
@@ -428,39 +377,36 @@ app.delete('/api/milestones/:id', async (req, res) => {
 // Groups
 app.get('/api/groups', async (req, res) => {
   try {
-    const result = await sql`SELECT * FROM Groups ORDER BY CreatedAt DESC`;
-    res.json(result);
+    const { data, error } = await supabase.from('Groups').select('*').order('CreatedAt', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.post('/api/groups', async (req, res) => {
   try {
     const { name, description } = req.body;
-    const result = await sql`
-      INSERT INTO Groups (Name, Description) 
-      RETURNING * VALUES (${name}, ${description})
-    `;
+    const { data, error } = await supabase.from('Groups').insert({ Name: name, Description: description }).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.patch('/api/groups/:id', async (req, res) => {
   try {
     const { name, description } = req.body;
-    const result = await sql`
-      UPDATE Groups SET Name=${name}, Description=${description}
-      RETURNING * WHERE Id=${req.params.id}
-    `;
+    const { data, error } = await supabase.from('Groups').update({ Name: name, Description: description }).eq('Id', req.params.id).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.delete('/api/groups/:id', async (req, res) => {
   try {
-    await sql`DELETE FROM UserGroups WHERE GroupId=${req.params.id}`;
-    await sql`DELETE FROM Groups WHERE Id=${req.params.id}`;
+    await supabase.from('UserGroups').delete().eq('GroupId', req.params.id);
+    await supabase.from('Groups').delete().eq('Id', req.params.id);
     io.emit('db_updated');
     res.json({ success: true });
   } catch (err) { res.status(500).send(err.message); }
@@ -469,55 +415,47 @@ app.delete('/api/groups/:id', async (req, res) => {
 // Tasks
 app.get('/api/tasks', async (req, res) => {
   try {
-    const result = await sql`SELECT * FROM Tasks ORDER BY CreatedAt DESC`;
-    res.json(result);
+    const { data, error } = await supabase.from('Tasks').select('*').order('CreatedAt', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.post('/api/tasks', async (req, res) => {
   try {
     const { title, projectId, assigneeId, status, startDate, dueDate, description, milestoneId, attachmentUrl } = req.body;
-    const result = await sql`
-      INSERT INTO Tasks (Title, ProjectId, AssigneeId, Status, StartDate, DueDate, Description, MilestoneId, AttachmentUrl) 
-      RETURNING *
-      VALUES (${title}, ${projectId}, ${assigneeId}, ${status || 'Todo'}, ${startDate || null}, ${dueDate || null}, ${description || null}, ${milestoneId || null}, ${attachmentUrl || null})
-    `;
+    const { data, error } = await supabase.from('Tasks').insert({ Title: title, ProjectId: projectId, AssigneeId: assigneeId, Status: status || 'Todo', StartDate: startDate || null, DueDate: dueDate || null, Description: description || null, MilestoneId: milestoneId || null, AttachmentUrl: attachmentUrl || null }).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+    res.json(data[0]);
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 app.patch('/api/tasks/:id', async (req, res) => {
   try {
     const { title, projectId, assigneeId, status, startDate, dueDate, description, milestoneId, attachmentUrl } = req.body;
-    const result = await sql`
-      UPDATE Tasks SET Title=${title}, ProjectId=${projectId}, AssigneeId=${assigneeId}, Status=${status}, StartDate=${startDate}, DueDate=${dueDate}, Description=${description}, MilestoneId=${milestoneId}, AttachmentUrl=${attachmentUrl}
-      RETURNING * WHERE Id=${req.params.id}
-    `;
+    const { data, error } = await supabase.from('Tasks').update({ Title: title, ProjectId: projectId, AssigneeId: assigneeId, Status: status, StartDate: startDate, DueDate: dueDate, Description: description, MilestoneId: milestoneId, AttachmentUrl: attachmentUrl }).eq('Id', req.params.id).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.patch('/api/tasks/:id/status', async (req, res) => {
   try {
-    const taskId = req.params.id;
     const { status } = req.body;
-    const result = await sql`
-      UPDATE Tasks SET Status = ${status} RETURNING * WHERE Id = ${taskId}
-    `;
+    const { data, error } = await supabase.from('Tasks').update({ Status: status }).eq('Id', req.params.id).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.delete('/api/tasks/:id', async (req, res) => {
   try {
-    await sql`DELETE FROM Comments WHERE TaskId=${req.params.id}`;
-    await sql`DELETE FROM Tickets WHERE TaskId=${req.params.id}`; // If tickets linked to tasks
-    await sql`DELETE FROM Tasks WHERE Id=${req.params.id}`;
+    await supabase.from('Comments').delete().eq('TaskId', req.params.id);
+    await supabase.from('Tickets').delete().eq('TaskId', req.params.id);
+    await supabase.from('Tasks').delete().eq('Id', req.params.id);
     io.emit('db_updated');
     res.json({ success: true });
   } catch (err) { res.status(500).send(err.message); }
@@ -526,101 +464,109 @@ app.delete('/api/tasks/:id', async (req, res) => {
 // Tickets
 app.get('/api/tickets', async (req, res) => {
   try {
-    const result = await sql`SELECT * FROM Tickets ORDER BY CreatedAt DESC`;
-    res.json(result);
+    const { data, error } = await supabase.from('Tickets').select('*').order('CreatedAt', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.post('/api/tickets', async (req, res) => {
   try {
     const { title, taskId, assigneeId, status, startDate, dueDate, systemId, projectId } = req.body;
-    const result = await sql`
-      INSERT INTO Tickets (Title, TaskId, AssigneeId, Status, StartDate, DueDate, SystemId, ProjectId) 
-      RETURNING *
-      VALUES (${title}, ${taskId}, ${assigneeId}, ${status || 'Open'}, ${startDate || null}, ${dueDate || null}, ${systemId || null}, ${projectId || null})
-    `;
+    const { data, error } = await supabase.from('Tickets').insert({ Title: title, TaskId: taskId, AssigneeId: assigneeId, Status: status || 'Open', StartDate: startDate || null, DueDate: dueDate || null, SystemId: systemId || null, ProjectId: projectId || null }).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+    res.json(data[0]);
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 app.patch('/api/tickets/:id', async (req, res) => {
   try {
     const { title, taskId, assigneeId, status, startDate, dueDate, systemId, projectId } = req.body;
-    const result = await sql`
-      UPDATE Tickets SET Title=${title}, TaskId=${taskId}, AssigneeId=${assigneeId}, Status=${status}, StartDate=${startDate}, DueDate=${dueDate}, SystemId=${systemId}, ProjectId=${projectId}
-      RETURNING * WHERE Id=${req.params.id}
-    `;
+    const { data, error } = await supabase.from('Tickets').update({ Title: title, TaskId: taskId, AssigneeId: assigneeId, Status: status, StartDate: startDate, DueDate: dueDate, SystemId: systemId, ProjectId: projectId }).eq('Id', req.params.id).select();
+    if (error) throw error;
     io.emit('db_updated');
-    res.json(result[0]);
+    res.json(data[0]);
   } catch (err) { res.status(500).send(err.message); }
 });
 
 app.delete('/api/tickets/:id', async (req, res) => {
   try {
-    await sql`DELETE FROM Comments WHERE IssueId=${req.params.id}`;
-    await sql`DELETE FROM Tickets WHERE Id=${req.params.id}`;
+    await supabase.from('Comments').delete().eq('IssueId', req.params.id);
+    await supabase.from('Tickets').delete().eq('Id', req.params.id);
     io.emit('db_updated');
     res.json({ success: true });
   } catch (err) { res.status(500).send(err.message); }
 });
 
-// PROJECT DETAILS (Tasks, Tickets, Comments)
+// PROJECT DETAILS
 app.get('/api/projects/:id/details', async (req, res) => {
   try {
     const projectId = req.params.id;
-    const tasksResult = await sql`
-      SELECT t.*, u.DisplayName as AssigneeName 
-      FROM Tasks t 
-      LEFT JOIN Users u ON t.AssigneeId = u.Id 
-      WHERE t.ProjectId = ${projectId}
-      ORDER BY t.CreatedAt DESC
-    `;
+    const { data: users } = await supabase.from('Users').select('Id, DisplayName');
     
-    // Tickets mapped via ProjectId or TaskId
-    const ticketsResult = await sql`
-      SELECT tk.*, u.DisplayName as AssigneeName 
-      FROM Tickets tk
-      LEFT JOIN Users u ON tk.AssigneeId = u.Id
-      WHERE tk.ProjectId = ${projectId} OR tk.TaskId IN (SELECT Id FROM Tasks WHERE ProjectId = ${projectId})
-      ORDER BY tk.CreatedAt ASC
-    `;
+    const { data: tasksResult } = await supabase.from('Tasks').select('*').eq('ProjectId', projectId).order('CreatedAt', { ascending: false });
+    const tasksData = tasksResult || [];
+    const tIds = tasksData.map(t => t.Id);
     
-    const commentsResult = await sql`
-      SELECT c.*, u.DisplayName as AuthorName 
-      FROM Comments c
-      JOIN Users u ON c.AuthorId = u.Id
-      WHERE c.TaskId IN (SELECT Id FROM Tasks WHERE ProjectId = ${projectId})
-         OR c.IssueId IN (SELECT Id FROM Tickets WHERE ProjectId = ${projectId} OR TaskId IN (SELECT Id FROM Tasks WHERE ProjectId = ${projectId}))
-      ORDER BY c.CreatedAt ASC
-    `;
+    let ticketsData = [];
+    if (tIds.length > 0) {
+      const { data: tk1 } = await supabase.from('Tickets').select('*').eq('ProjectId', projectId);
+      const { data: tk2 } = await supabase.from('Tickets').select('*').in('TaskId', tIds);
+      
+      const tkMap = new Map();
+      [...(tk1 || []), ...(tk2 || [])].forEach(tk => tkMap.set(tk.Id, tk));
+      ticketsData = Array.from(tkMap.values()).sort((a,b) => new Date(a.CreatedAt) - new Date(b.CreatedAt));
+    } else {
+      const { data } = await supabase.from('Tickets').select('*').eq('ProjectId', projectId).order('CreatedAt', { ascending: true });
+      ticketsData = data || [];
+    }
     
+    let commentsData = [];
+    if (tIds.length > 0 || ticketsData.length > 0) {
+      const tkIds = ticketsData.map(tk => tk.Id);
+      
+      let q = supabase.from('Comments').select('*');
+      if (tIds.length > 0 && tkIds.length > 0) {
+        q = q.or(`TaskId.in.(${tIds.join(',')}),IssueId.in.(${tkIds.join(',')})`);
+      } else if (tIds.length > 0) {
+        q = q.in('TaskId', tIds);
+      } else if (tkIds.length > 0) {
+        q = q.in('IssueId', tkIds);
+      }
+      const { data } = await q.order('CreatedAt', { ascending: true });
+      commentsData = data || [];
+    }
+
+    const getUserName = (id) => {
+      const u = (users || []).find(x => x.Id === id);
+      return u ? u.DisplayName : null;
+    };
+
     const now = new Date();
-    const comments = commentsResult;
+    const comments = commentsData.map(c => ({...c, AuthorName: getUserName(c.AuthorId)}));
     
-    // Process Tickets
-    const tickets = ticketsResult.map(i => {
+    const tickets = ticketsData.map(i => {
       let currentStatus = i.Status;
       if (i.DueDate && new Date(i.DueDate) < now && currentStatus.toLowerCase() !== 'done' && currentStatus.toLowerCase() !== 'closed') {
         currentStatus = 'Overdue';
       }
       return { 
         ...i, 
+        AssigneeName: getUserName(i.AssigneeId),
         Status: currentStatus,
         comments: comments.filter(c => c.IssueId === i.Id)
       };
     });
 
-    // Process Tasks and nest tickets
-    const tasks = tasksResult.map(t => {
+    const tasks = tasksData.map(t => {
       let currentStatus = t.Status;
       if (t.DueDate && new Date(t.DueDate) < now && currentStatus.toLowerCase() !== 'done') {
         currentStatus = 'Overdue';
       }
       return { 
         ...t, 
+        AssigneeName: getUserName(t.AssigneeId),
         Status: currentStatus,
         tickets: tickets.filter(tk => tk.TaskId === t.Id),
         comments: comments.filter(c => c.TaskId === t.Id)
@@ -628,36 +574,39 @@ app.get('/api/projects/:id/details', async (req, res) => {
     });
     
     res.json({ tasks, tickets });
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 // DASHBOARD STATS
 app.get('/api/dashboard', async (req, res) => {
   try {
     const auth = await getUserAuth(req);
-    let projectsRes, tasksRes, ticketsRes, milestonesRes;
+    let projects = [], tasks = [], tickets = [], milestones = [];
     
     if (auth.role === 'Admin') {
-      projectsRes = await sql`SELECT Id, Name FROM Projects`;
-      tasksRes = await sql`SELECT Id, ProjectId, Status, DueDate FROM Tasks`;
-      ticketsRes = await sql`SELECT Id, Status, DueDate, ProjectId FROM Tickets`;
-      milestonesRes = await sql`SELECT * FROM Milestones`;
+      const { data: p } = await supabase.from('Projects').select('Id, Name'); projects = p || [];
+      const { data: t } = await supabase.from('Tasks').select('Id, ProjectId, Status, DueDate'); tasks = t || [];
+      const { data: tk } = await supabase.from('Tickets').select('Id, Status, DueDate, ProjectId, TaskId'); tickets = tk || [];
+      const { data: m } = await supabase.from('Milestones').select('*'); milestones = m || [];
     } else {
-      projectsRes = await sql`SELECT Id, Name FROM Projects WHERE Id IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id})`;
-      tasksRes = await sql`SELECT Id, ProjectId, Status, DueDate FROM Tasks WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id})`;
-      ticketsRes = await sql`SELECT Id, Status, DueDate, ProjectId FROM Tickets WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id}) OR TaskId IN (SELECT Id FROM Tasks WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id}))`;
-      milestonesRes = await sql`SELECT * FROM Milestones WHERE ProjectId IN (SELECT ProjectId FROM UserProjects WHERE UserId = ${auth.id})`;
+      const { data: up } = await supabase.from('UserProjects').select('ProjectId').eq('UserId', auth.id);
+      const pIds = (up || []).map(r => r.ProjectId);
+      
+      const { data: p } = await supabase.from('Projects').select('Id, Name').in('Id', pIds.length ? pIds : [0]); projects = p || [];
+      const { data: t } = await supabase.from('Tasks').select('Id, ProjectId, Status, DueDate').in('ProjectId', pIds.length ? pIds : [0]); tasks = t || [];
+      
+      const tIds = tasks.map(x => x.Id);
+      const { data: tk1 } = await supabase.from('Tickets').select('Id, Status, DueDate, ProjectId, TaskId').in('ProjectId', pIds.length ? pIds : [0]);
+      const { data: tk2 } = await supabase.from('Tickets').select('Id, Status, DueDate, ProjectId, TaskId').in('TaskId', tIds.length ? tIds : [0]);
+      
+      const tkMap = new Map();
+      [...(tk1 || []), ...(tk2 || [])].forEach(tk => tkMap.set(tk.Id, tk));
+      tickets = Array.from(tkMap.values());
+      
+      const { data: m } = await supabase.from('Milestones').select('*').in('ProjectId', pIds.length ? pIds : [0]); milestones = m || [];
     }
     
-    const projects = projectsRes;
-    const tasks = tasksRes;
-    const tickets = ticketsRes;
-    const milestones = milestonesRes;
-    
     const now = new Date();
-    
     const stats = {
       totalProjects: projects.length,
       totalTasks: tasks.length,
@@ -669,7 +618,7 @@ app.get('/api/dashboard', async (req, res) => {
           return s;
         });
         
-        const pTickets = tickets.filter(i => i.ProjectId === p.Id).map(i => {
+        const pTickets = tickets.filter(i => i.ProjectId === p.Id || (i.TaskId && tasks.find(ts => ts.Id === i.TaskId && ts.ProjectId === p.Id))).map(i => {
           let s = i.Status;
           if (i.DueDate && new Date(i.DueDate) < now && s.toLowerCase() !== 'done' && s.toLowerCase() !== 'closed') s = 'Overdue';
           return s;
@@ -698,9 +647,7 @@ app.get('/api/dashboard', async (req, res) => {
     };
     
     res.json(stats);
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
+  } catch (err) { res.status(500).send(err.message); }
 });
 
 // Socket.io
@@ -708,15 +655,11 @@ io.on('connection', (socket) => {
   socket.on('new_feed', async (data) => {
     try {
       const { content, parsedTags, authorId, parentId } = data;
-      const result = await sql`
-        INSERT INTO Feed (Content, ParsedTags, AuthorId, ParentId) 
-        RETURNING * 
-        VALUES (${content}, ${JSON.stringify(parsedTags)}, ${authorId || 1}, ${parentId || null})
-      `;
-      io.emit('feed_added', result[0]);
-    } catch (err) {
-      console.error('Error inserting feed:', err);
-    }
+      const { data: res, error } = await supabase.from('Feed').insert({ Content: content, ParsedTags: JSON.stringify(parsedTags), AuthorId: authorId || 1, ParentId: parentId || null }).select();
+      if (!error && res && res.length > 0) {
+        io.emit('feed_added', res[0]);
+      }
+    } catch (err) { console.error('Error inserting feed:', err); }
   });
 });
 
@@ -728,4 +671,3 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 export default app;
-
