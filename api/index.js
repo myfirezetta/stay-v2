@@ -18,7 +18,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/')
+    cb(null, '/tmp')
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
@@ -37,7 +37,8 @@ const io = new Server(server, {
 
 
 const sql = postgres('postgresql://postgres.tsavzxmdqgccftrddeph:SXmLBY57do4tp2kqx1@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres', {
-  ssl: 'require'
+  ssl: 'require',
+  prepare: false
 });
 
 
