@@ -36,9 +36,8 @@ const io = new Server(server, {
 });
 
 
-const sql = postgres('postgresql://postgres.tsavzxmdqgccftrddeph:SXmLBY57do4tp2kqx1@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres', {
-  ssl: 'require',
-  prepare: false
+const sql = postgres('postgresql://postgres:SXmLBY57do4tp2kqx1@db.tsavzxmdqgccftrddeph.supabase.co:5432/postgres', {
+  ssl: 'require'
 });
 
 
