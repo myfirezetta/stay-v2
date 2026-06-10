@@ -183,16 +183,16 @@ app.get('/api/users', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const { data, error } = await supabase.from('Users').select('Id, DisplayName, Email, Role, PasswordHash, RequiresPasswordChange').eq('Email', email);
+    const { username, password } = req.body;
+    const { data, error } = await supabase.from('Users').select('Id, DisplayName, Email, Role, PasswordHash, RequiresPasswordChange').ilike('DisplayName', username);
     if (error) throw error;
-    if (!data || data.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
+    if (!data || data.length === 0) return res.status(401).json({ error: 'Invalid username or password' });
     
     const user = data[0];
     if (!user.PasswordHash) return res.json({ id: user.Id, displayName: user.DisplayName, email: user.Email, role: user.Role, requiresPasswordChange: true });
 
     const isValid = await bcrypt.compare(password, user.PasswordHash);
-    if (!isValid) return res.status(401).json({ error: 'Invalid email or password' });
+    if (!isValid) return res.status(401).json({ error: 'Invalid username or password' });
 
     res.json({ id: user.Id, displayName: user.DisplayName, email: user.Email, role: user.Role, requiresPasswordChange: user.RequiresPasswordChange });
   } catch (err) { res.status(500).send(err.message); }

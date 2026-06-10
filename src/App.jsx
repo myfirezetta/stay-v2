@@ -10,8 +10,8 @@ function App() {
   const [isManageOpen, setIsManageOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('Home');
   const [manageEntity, setManageEntity] = useState('Projects');
-  // Temporarily bypass login by defaulting to Alice (Admin)
-  const [currentUser, setCurrentUser] = useState({ id: 1, displayName: 'Alice', role: 'Admin' });
+  // Authentication enabled: requires login via LoginView
+  const [currentUser, setCurrentUser] = useState(null);
 
   if (!currentUser) {
     return <LoginView onLoginSuccess={(user) => setCurrentUser(user)} />;

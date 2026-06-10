@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Lock, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
 
 export function LoginView({ onLoginSuccess }) {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -23,7 +23,7 @@ export function LoginView({ onLoginSuccess }) {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ username, password })
       });
 
       const data = await res.json();
@@ -109,18 +109,18 @@ export function LoginView({ onLoginSuccess }) {
                   </div>
                 )}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-bold text-zinc-700 dark:text-zinc-300 ml-1">Email</label>
+                  <label className="text-sm font-bold text-zinc-700 dark:text-zinc-300 ml-1">Username</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <Mail size={18} className="text-zinc-400" />
+                      <ShieldCheck size={18} className="text-zinc-400" />
                     </div>
                     <input 
-                      type="email" 
+                      type="text" 
                       required 
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
                       className="w-full pl-11 pr-4 py-3 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow" 
-                      placeholder="alice@example.com" 
+                      placeholder="e.g. Alice" 
                     />
                   </div>
                 </div>
