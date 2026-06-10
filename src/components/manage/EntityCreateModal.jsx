@@ -16,7 +16,10 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
           description: editItem.Description || '',
           email: editItem.Email || '',
           projectId: editItem.ProjectId || '',
-          assigneeId: editItem.AssigneeId || ''
+          assigneeId: editItem.AssigneeId || '',
+          startDate: editItem.StartDate ? editItem.StartDate.split('T')[0] : '',
+          dueDate: editItem.DueDate ? editItem.DueDate.split('T')[0] : '',
+          attachmentUrl: editItem.AttachmentUrl || ''
         });
       } else {
         setFormData({});
@@ -34,6 +37,29 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const data = new FormData();
+    data.append('file', file);
+    
+    try {
+      setLoading(true);
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: data
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      const json = await res.json();
+      setFormData(prev => ({ ...prev, attachmentUrl: json.url }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -125,7 +151,7 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
     );
 
     // Description
-    if (['Projects', 'Tasks', 'Systems', 'Groups', 'Users'].includes(entityType)) {
+    if (['Projects', 'Tasks', 'Systems', 'Groups', 'Users', 'Tickets'].includes(entityType)) {
       fields.push(
         <div key="desc" className="flex flex-col gap-1.5">
           <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Description</label>
@@ -163,6 +189,39 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
               <option value="">Select Assignee...</option>
               {lookupData.users?.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
+          </div>
+        );
+      }
+      
+      if (['Tasks', 'Tickets'].includes(entityType)) {
+        fields.push(
+          <div key="dates" className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Start Date</label>
+              <input type="date" name="startDate" value={formData.startDate || ''} onChange={handleInputChange} className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Due Date</label>
+              <input type="date" name="dueDate" value={formData.dueDate || ''} onChange={handleInputChange} className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+        );
+      }
+      
+      if (['Tasks', 'Tickets'].includes(entityType)) {
+        fields.push(
+          <div key="attachment" className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Attachment (Image/Doc)</label>
+            <input 
+              type="file" 
+              onChange={handleFileUpload} 
+              className="w-full p-2 text-sm text-zinc-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 dark:file:bg-indigo-500/10 dark:file:text-indigo-400" 
+            />
+            {formData.attachmentUrl && (
+              <a href={formData.attachmentUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mt-1 hover:underline truncate">
+                View Attached File
+              </a>
+            )}
           </div>
         );
       }

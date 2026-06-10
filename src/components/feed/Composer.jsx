@@ -161,7 +161,13 @@ export function Composer({ parentId = null, onSuccess = null, compact = false, c
     if (!content.trim()) return;
 
     const parsedTags = parseTags(content);
-    socket.emit('new_feed', { content, parsedTags, authorId: 1, parentId });
+    fetch('/api/feed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, parsedTags, authorId: currentUser ? currentUser.id : 1, parentId })
+    }).then(res => res.json()).then(data => {
+      window.dispatchEvent(new CustomEvent('feed_added', { detail: data }));
+    }).catch(console.error);
     
     setContent('');
     setAutocomplete(null);

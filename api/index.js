@@ -18,7 +18,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, '/tmp')
+    cb(null, path.join(__dirname, 'uploads'))
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
@@ -26,6 +26,11 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage: storage });
+
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).send('No file uploaded.');
+  res.json({ url: `/uploads/${req.file.filename}` });
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -433,8 +438,8 @@ app.post('/api/tasks', async (req, res) => {
 
 app.patch('/api/tasks/:id', async (req, res) => {
   try {
-    const { title, projectId, assigneeId, status, startDate, dueDate, description, milestoneId, attachmentUrl } = req.body;
-    const { data, error } = await supabase.from('Tasks').update({ Title: title, ProjectId: projectId, AssigneeId: assigneeId, Status: status, StartDate: startDate, DueDate: dueDate, Description: description, MilestoneId: milestoneId, AttachmentUrl: attachmentUrl }).eq('Id', req.params.id).select();
+    const { title, projectId, assigneeId, status, startDate, dueDate, doneDate, description, milestoneId, attachmentUrl } = req.body;
+    const { data, error } = await supabase.from('Tasks').update({ Title: title, ProjectId: projectId, AssigneeId: assigneeId, Status: status, StartDate: startDate, DueDate: dueDate, DoneDate: doneDate, Description: description, MilestoneId: milestoneId, AttachmentUrl: attachmentUrl }).eq('Id', req.params.id).select();
     if (error) throw error;
     io.emit('db_updated');
     res.json(data[0]);
@@ -443,8 +448,12 @@ app.patch('/api/tasks/:id', async (req, res) => {
 
 app.patch('/api/tasks/:id/status', async (req, res) => {
   try {
-    const { status } = req.body;
-    const { data, error } = await supabase.from('Tasks').update({ Status: status }).eq('Id', req.params.id).select();
+    const { status, startDate, doneDate } = req.body;
+    let updatePayload = { Status: status };
+    if (startDate) updatePayload.StartDate = startDate;
+    if (doneDate) updatePayload.DoneDate = doneDate;
+
+    const { data, error } = await supabase.from('Tasks').update(updatePayload).eq('Id', req.params.id).select();
     if (error) throw error;
     io.emit('db_updated');
     res.json(data[0]);
@@ -472,8 +481,8 @@ app.get('/api/tickets', async (req, res) => {
 
 app.post('/api/tickets', async (req, res) => {
   try {
-    const { title, taskId, assigneeId, status, startDate, dueDate, systemId, projectId } = req.body;
-    const { data, error } = await supabase.from('Tickets').insert({ Title: title, TaskId: taskId, AssigneeId: assigneeId, Status: status || 'Open', StartDate: startDate || null, DueDate: dueDate || null, SystemId: systemId || null, ProjectId: projectId || null }).select();
+    const { title, taskId, assigneeId, status, startDate, dueDate, systemId, projectId, description, attachmentUrl } = req.body;
+    const { data, error } = await supabase.from('Tickets').insert({ Title: title, TaskId: taskId, AssigneeId: assigneeId, Status: status || 'Open', StartDate: startDate || null, DueDate: dueDate || null, SystemId: systemId || null, ProjectId: projectId || null, Description: description || null, AttachmentUrl: attachmentUrl || null }).select();
     if (error) throw error;
     io.emit('db_updated');
     res.json(data[0]);
@@ -482,8 +491,8 @@ app.post('/api/tickets', async (req, res) => {
 
 app.patch('/api/tickets/:id', async (req, res) => {
   try {
-    const { title, taskId, assigneeId, status, startDate, dueDate, systemId, projectId } = req.body;
-    const { data, error } = await supabase.from('Tickets').update({ Title: title, TaskId: taskId, AssigneeId: assigneeId, Status: status, StartDate: startDate, DueDate: dueDate, SystemId: systemId, ProjectId: projectId }).eq('Id', req.params.id).select();
+    const { title, taskId, assigneeId, status, startDate, dueDate, doneDate, systemId, projectId, description, attachmentUrl } = req.body;
+    const { data, error } = await supabase.from('Tickets').update({ Title: title, TaskId: taskId, AssigneeId: assigneeId, Status: status, StartDate: startDate, DueDate: dueDate, DoneDate: doneDate, SystemId: systemId, ProjectId: projectId, Description: description, AttachmentUrl: attachmentUrl }).eq('Id', req.params.id).select();
     if (error) throw error;
     io.emit('db_updated');
     res.json(data[0]);
@@ -650,17 +659,112 @@ app.get('/api/dashboard', async (req, res) => {
   } catch (err) { res.status(500).send(err.message); }
 });
 
-// Socket.io
-io.on('connection', (socket) => {
-  socket.on('new_feed', async (data) => {
-    try {
-      const { content, parsedTags, authorId, parentId } = data;
-      const { data: res, error } = await supabase.from('Feed').insert({ Content: content, ParsedTags: JSON.stringify(parsedTags), AuthorId: authorId || 1, ParentId: parentId || null }).select();
-      if (!error && res && res.length > 0) {
-        io.emit('feed_added', res[0]);
+app.post('/api/feed', async (req, res) => {
+  try {
+    const { content, parsedTags, authorId, parentId } = req.body;
+    
+    // Process "new task" or "new issue"
+    const lowerContent = content.toLowerCase();
+    const isNewTask = lowerContent.includes('new task');
+    const isNewIssue = lowerContent.includes('new issue');
+    
+    let assignedUserId = null;
+    let projectId = null;
+    let taskId = null;
+    let ticketId = null;
+    
+    const { data: users } = await supabase.from('Users').select('Id, DisplayName');
+    const { data: projects } = await supabase.from('Projects').select('Id, Name');
+    const { data: tasks } = await supabase.from('Tasks').select('Id, Title, ProjectId');
+    const { data: tickets } = await supabase.from('Tickets').select('Id, Title');
+
+    const clean = (str) => (str || '').replace(/\s+/g, '').toLowerCase();
+
+    const resolvedTags = [];
+    for (let tag of parsedTags || []) {
+      const val = clean(tag.value);
+      if (tag.symbol === '@') {
+        const user = users?.find(u => clean(u.DisplayName) === val);
+        if (user) { assignedUserId = user.Id; resolvedTags.push({ type: 'user', id: user.Id }); }
+      } else if (tag.symbol === '#') {
+        const proj = projects?.find(p => clean(p.Name) === val);
+        if (proj) { projectId = proj.Id; resolvedTags.push({ type: 'project', id: proj.Id }); }
+        
+        const tsk = tasks?.find(t => clean(t.Title) === val);
+        if (tsk) { taskId = tsk.Id; resolvedTags.push({ type: 'task', id: tsk.Id }); }
+      } else if (tag.symbol === '!') {
+        const tkt = tickets?.find(t => clean(t.Title) === val);
+        if (tkt) { ticketId = tkt.Id; resolvedTags.push({ type: 'ticket', id: tkt.Id }); }
       }
-    } catch (err) { console.error('Error inserting feed:', err); }
-  });
+    }
+
+    const titleMatch = content.match(/(?:new task|new issue)[\s:]*([^#@!*&]+)/i);
+    let title = titleMatch ? titleMatch[1].trim() : 'Auto-created item';
+    if (title.length > 100) title = title.substring(0, 100) + '...';
+
+    if (isNewTask && projectId) {
+      const dup = tasks?.find(t => t.ProjectId === projectId && t.Title.toLowerCase() === title.toLowerCase());
+      if (!dup) {
+        const { data: newTask } = await supabase.from('Tasks').insert({
+          Title: title,
+          ProjectId: projectId,
+          AssigneeId: assignedUserId,
+          Status: 'New',
+          Description: content
+        }).select();
+        if (newTask && newTask.length > 0) {
+          taskId = newTask[0].Id;
+          resolvedTags.push({ type: 'task', id: taskId });
+          io.emit('db_updated');
+        }
+      }
+    } else if (isNewIssue && (taskId || projectId)) {
+      const dup = tickets?.find(t => t.Title.toLowerCase() === title.toLowerCase());
+      if (!dup) {
+        const { data: newTicket } = await supabase.from('Tickets').insert({
+          Title: title,
+          TaskId: taskId || null,
+          ProjectId: projectId || null,
+          AssigneeId: assignedUserId,
+          Status: 'New'
+        }).select();
+        if (newTicket && newTicket.length > 0) {
+          ticketId = newTicket[0].Id;
+          resolvedTags.push({ type: 'ticket', id: ticketId });
+          io.emit('db_updated');
+        }
+      }
+    } else if (assignedUserId) {
+      if (taskId && !isNewTask) {
+        await supabase.from('Tasks').update({ AssigneeId: assignedUserId }).eq('Id', taskId);
+        io.emit('db_updated');
+      } else if (ticketId && !isNewIssue) {
+        await supabase.from('Tickets').update({ AssigneeId: assignedUserId }).eq('Id', ticketId);
+        io.emit('db_updated');
+      }
+    }
+
+    const { data: resData, error } = await supabase.from('Feed').insert({
+      Content: content,
+      ParsedTags: JSON.stringify(resolvedTags),
+      AuthorId: authorId || 1,
+      ParentId: parentId || null
+    }).select();
+    
+    if (error) throw error;
+    if (resData && resData.length > 0) {
+      io.emit('feed_added', resData[0]);
+      res.json(resData[0]);
+    } else {
+      res.status(500).send('Failed to create feed');
+    }
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+io.on('connection', (socket) => {
+  // socket handlers if any remain
 });
 
 const PORT = process.env.PORT || 3001;

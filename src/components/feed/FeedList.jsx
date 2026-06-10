@@ -48,6 +48,9 @@ export function FeedList({ currentUser }) {
       setFeed(prev => prev.filter(item => item.Id !== parseInt(id, 10)));
     };
 
+    const handleNewFeedLocal = (e) => handleNewFeed(e.detail);
+    window.addEventListener('feed_added', handleNewFeedLocal);
+
     socket.on('feed_added', handleNewFeed);
     socket.on('feed_updated', (updatedItem) => {
       setFeed(prev => prev.map(item => item.Id === updatedItem.Id ? updatedItem : item));
@@ -55,6 +58,7 @@ export function FeedList({ currentUser }) {
     socket.on('feed_deleted', handleDeletedFeed);
 
     return () => {
+      window.removeEventListener('feed_added', handleNewFeedLocal);
       socket.off('feed_added', handleNewFeed);
       socket.off('feed_updated');
       socket.off('feed_deleted', handleDeletedFeed);

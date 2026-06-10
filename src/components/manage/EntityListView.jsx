@@ -48,29 +48,36 @@ export function EntityListView({ entityType, currentUser }) {
     }
   };
 
+  const startTask = async (id, isTicket) => {
+    const endpoint = isTicket ? `/api/tickets/${id}` : `/api/tasks/${id}/status`;
+    try {
+      const item = data.find(d => d.Id === id);
+      await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser ? { 'X-User-Id': currentUser.id.toString() } : {})
+        },
+        body: JSON.stringify({ ...(isTicket ? item : {}), status: 'Ongoing', startDate: new Date().toISOString() })
+      });
+      fetchData(); // refresh list
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const markAsDone = async (id, isTicket) => {
     const endpoint = isTicket ? `/api/tickets/${id}` : `/api/tasks/${id}/status`;
     try {
-      if (isTicket) {
-        const item = data.find(d => d.Id === id);
-        await fetch(`${endpoint}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(currentUser ? { 'X-User-Id': currentUser.id.toString() } : {})
-          },
-          body: JSON.stringify({ ...item, status: 'Done' })
-        });
-      } else {
-        await fetch(`${endpoint}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(currentUser ? { 'X-User-Id': currentUser.id.toString() } : {})
-          },
-          body: JSON.stringify({ status: 'Done' })
-        });
-      }
+      const item = data.find(d => d.Id === id);
+      await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser ? { 'X-User-Id': currentUser.id.toString() } : {})
+        },
+        body: JSON.stringify({ ...(isTicket ? item : {}), status: 'Done', doneDate: new Date().toISOString() })
+      });
       fetchData(); // refresh list
     } catch (e) {
       console.error(e);
@@ -107,14 +114,33 @@ export function EntityListView({ entityType, currentUser }) {
     }
   };
 
+  const calculatePerformance = (item) => {
+    if (!item.StartDate) return <span className="text-zinc-400">-</span>;
+    const start = new Date(item.StartDate);
+    const due = item.DueDate ? new Date(item.DueDate) : null;
+    const done = item.DoneDate ? new Date(item.DoneDate) : null;
+
+    let targetDays = due ? Math.max(0, Math.round((due - start) / (1000 * 60 * 60 * 24))) : '?';
+    let actualDays = done ? Math.max(0, Math.round((done - start) / (1000 * 60 * 60 * 24))) : '...';
+
+    return (
+      <div className="flex flex-col text-xs gap-0.5">
+        <span className="text-zinc-500">Target: {targetDays}d</span>
+        <span className={done ? (actualDays <= targetDays || targetDays === '?' ? "text-emerald-600 font-medium" : "text-red-600 font-medium") : "text-blue-600"}>
+          Actual: {actualDays}{done ? 'd' : ''}
+        </span>
+      </div>
+    );
+  };
+
   const renderTableHeaders = () => {
     if (['Tasks', 'Tickets'].includes(entityType)) {
       return (
         <tr>
           <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Title</th>
           <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Status</th>
-          <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Start Date</th>
-          <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Due Date</th>
+          <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Dates</th>
+          <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Performance</th>
           <th className="px-6 py-4 text-right text-xs font-bold text-zinc-500 uppercase tracking-wider">Actions</th>
         </tr>
       );
@@ -147,8 +173,14 @@ export function EntityListView({ entityType, currentUser }) {
         <tr key={item.Id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
           <td className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-100">{item.Title}</td>
           <td className="px-6 py-4">{getStatusBadge(smartStatus)}</td>
-          <td className="px-6 py-4 text-sm text-zinc-500">{item.StartDate ? new Date(item.StartDate).toLocaleDateString() : '-'}</td>
-          <td className="px-6 py-4 text-sm text-zinc-500">{item.DueDate ? new Date(item.DueDate).toLocaleDateString() : '-'}</td>
+          <td className="px-6 py-4">
+            <div className="flex flex-col text-xs text-zinc-500 gap-0.5">
+              <span>S: {item.StartDate ? new Date(item.StartDate).toLocaleDateString() : '-'}</span>
+              <span>D: {item.DueDate ? new Date(item.DueDate).toLocaleDateString() : '-'}</span>
+              {item.DoneDate && <span className="font-medium text-emerald-600">F: {new Date(item.DoneDate).toLocaleDateString()}</span>}
+            </div>
+          </td>
+          <td className="px-6 py-4">{calculatePerformance(item)}</td>
           <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
             <button 
               onClick={() => openEditModal(item)}
@@ -164,13 +196,22 @@ export function EntityListView({ entityType, currentUser }) {
             >
               <Trash2 size={16} />
             </button>
-            {smartStatus !== 'Done' && (
+            {['New', 'Todo'].includes(smartStatus) && (!item.AssigneeId || item.AssigneeId === currentUser?.id) && (
+              <button 
+                onClick={() => startTask(item.Id, isTicket)}
+                title="Start Work"
+                className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-blue-100 dark:hover:bg-blue-500/20 hover:text-blue-700 dark:hover:text-blue-400 transition-colors"
+              >
+                <Clock size={16} />
+              </button>
+            )}
+            {smartStatus === 'Ongoing' && (!item.AssigneeId || item.AssigneeId === currentUser?.id) && (
               <button 
                 onClick={() => markAsDone(item.Id, isTicket)}
                 title="Mark Done"
                 className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
               >
-                <Check size={16} />
+                <CheckCircle size={16} />
               </button>
             )}
           </td>
