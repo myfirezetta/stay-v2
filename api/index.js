@@ -465,8 +465,9 @@ app.get('/api/tasks', async (req, res) => {
 
 app.post('/api/tasks', async (req, res) => {
   try {
+    const creatorId = req.headers['x-user-id'] ? parseInt(req.headers['x-user-id']) : null;
     const { title, projectId, assigneeId, status, startDate, dueDate, description, milestoneId, attachmentUrl } = req.body;
-    const { data, error } = await supabase.from('Tasks').insert({ Title: title, ProjectId: projectId, AssigneeId: assigneeId, Status: status || 'Todo', StartDate: startDate || null, DueDate: dueDate || null, Description: description || null, MilestoneId: milestoneId || null, AttachmentUrl: attachmentUrl || null }).select();
+    const { data, error } = await supabase.from('Tasks').insert({ Title: title, ProjectId: projectId, AssigneeId: assigneeId, CreatorId: creatorId, Status: status || 'Todo', StartDate: startDate || null, DueDate: dueDate || null, Description: description || null, MilestoneId: milestoneId || null, AttachmentUrl: attachmentUrl || null }).select();
     if (error) throw error;
     io.emit('db_updated');
     res.json(data[0]);
@@ -518,8 +519,9 @@ app.get('/api/tickets', async (req, res) => {
 
 app.post('/api/tickets', async (req, res) => {
   try {
+    const creatorId = req.headers['x-user-id'] ? parseInt(req.headers['x-user-id']) : null;
     const { title, taskId, assigneeId, status, startDate, dueDate, systemId, projectId, description, attachmentUrl } = req.body;
-    const { data, error } = await supabase.from('Tickets').insert({ Title: title, TaskId: taskId, AssigneeId: assigneeId, Status: status || 'Open', StartDate: startDate || null, DueDate: dueDate || null, SystemId: systemId || null, ProjectId: projectId || null, Description: description || null, AttachmentUrl: attachmentUrl || null }).select();
+    const { data, error } = await supabase.from('Tickets').insert({ Title: title, TaskId: taskId, AssigneeId: assigneeId, CreatorId: creatorId, Status: status || 'Open', StartDate: startDate || null, DueDate: dueDate || null, SystemId: systemId || null, ProjectId: projectId || null, Description: description || null, AttachmentUrl: attachmentUrl || null }).select();
     if (error) throw error;
     io.emit('db_updated');
     res.json(data[0]);

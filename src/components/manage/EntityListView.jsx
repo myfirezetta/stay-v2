@@ -5,6 +5,7 @@ import { EntityCreateModal } from './EntityCreateModal';
 
 export function EntityListView({ entityType, currentUser }) {
   const [data, setData] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -17,13 +18,12 @@ export function EntityListView({ entityType, currentUser }) {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/${entityType.toLowerCase()}`, {
-        headers: currentUser ? { 'X-User-Id': currentUser.id.toString() } : {}
-      });
-      if (res.ok) {
-        const json = await res.json();
-        setData(json);
-      }
+      const [res, usersRes] = await Promise.all([
+        fetch(`/api/${entityType.toLowerCase()}`, { headers: currentUser ? { 'X-User-Id': currentUser.id.toString() } : {} }),
+        fetch('/api/users')
+      ]);
+      if (res.ok) setData(await res.json());
+      if (usersRes.ok) setUsers(await usersRes.json());
     } catch (err) {
       console.error("Failed to load entities", err);
     } finally {
@@ -153,6 +153,7 @@ export function EntityListView({ entityType, currentUser }) {
           <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Title</th>
           <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Status</th>
           <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Dates</th>
+          <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">People</th>
           <th className="px-6 py-4 text-left text-xs font-bold text-zinc-500 uppercase tracking-wider">Performance</th>
           <th className="px-6 py-4 text-right text-xs font-bold text-zinc-500 uppercase tracking-wider">Actions</th>
         </tr>
@@ -196,6 +197,12 @@ export function EntityListView({ entityType, currentUser }) {
               <span>S: {item.StartDate ? new Date(item.StartDate).toLocaleDateString() : '-'}</span>
               <span>D: {item.DueDate ? new Date(item.DueDate).toLocaleDateString() : '-'}</span>
               {item.DoneDate && <span className="font-medium text-emerald-600">F: {new Date(item.DoneDate).toLocaleDateString()}</span>}
+            </div>
+          </td>
+          <td className="px-6 py-4">
+            <div className="flex flex-col text-xs gap-1">
+              {item.CreatorId && <div className="text-zinc-600 dark:text-zinc-400"><span className="font-semibold text-zinc-500">Posted by:</span> {users.find(u => u.id === item.CreatorId)?.name || 'Unknown'}</div>}
+              {item.AssigneeId && <div className="text-zinc-600 dark:text-zinc-400"><span className="font-semibold text-zinc-500">Assignee:</span> {users.find(u => u.id === item.AssigneeId)?.name || 'Unknown'}</div>}
             </div>
           </td>
           <td className="px-6 py-4">{calculatePerformance(item)}</td>
