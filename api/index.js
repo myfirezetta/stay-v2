@@ -417,6 +417,43 @@ app.delete('/api/groups/:id', async (req, res) => {
   } catch (err) { res.status(500).send(err.message); }
 });
 
+// Departments
+app.get('/api/departments', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('Departments').select('*').order('CreatedAt', { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).send(err.message); }
+});
+
+app.post('/api/departments', async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    const { data, error } = await supabase.from('Departments').insert({ Name: name, Description: description }).select();
+    if (error) throw error;
+    io.emit('db_updated');
+    res.json(data[0]);
+  } catch (err) { res.status(500).send(err.message); }
+});
+
+app.patch('/api/departments/:id', async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    const { data, error } = await supabase.from('Departments').update({ Name: name, Description: description }).eq('Id', req.params.id).select();
+    if (error) throw error;
+    io.emit('db_updated');
+    res.json(data[0]);
+  } catch (err) { res.status(500).send(err.message); }
+});
+
+app.delete('/api/departments/:id', async (req, res) => {
+  try {
+    await supabase.from('Departments').delete().eq('Id', req.params.id);
+    io.emit('db_updated');
+    res.json({ success: true });
+  } catch (err) { res.status(500).send(err.message); }
+});
+
 // Tasks
 app.get('/api/tasks', async (req, res) => {
   try {

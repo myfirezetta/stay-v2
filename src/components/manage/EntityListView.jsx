@@ -32,6 +32,7 @@ export function EntityListView({ entityType, currentUser }) {
   };
 
   useEffect(() => {
+    setData([]); // Clear old data to avoid showing wrong data on fetch error
     fetchData();
   }, [entityType]);
 
