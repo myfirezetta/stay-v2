@@ -11,7 +11,7 @@ export function AppLayout({ children, onManageClick, activeTab, onTabChange, onL
         <Sidebar onManageClick={onManageClick} activeTab={activeTab} onTabChange={onTabChange} onLogout={onLogout} currentUser={currentUser} />
 
         {/* Main Feed Column */}
-        <main className="w-full max-w-[600px] border-x border-zinc-100 dark:border-zinc-800/50 min-h-[100dvh] flex flex-col relative bg-white/40 dark:bg-zinc-950/40 backdrop-blur-sm">
+        <main className="w-full flex-1 max-w-[800px] border-x border-zinc-100 dark:border-zinc-800/50 min-h-[100dvh] flex flex-col relative bg-white/40 dark:bg-zinc-950/40 backdrop-blur-sm">
           {children}
         </main>
 

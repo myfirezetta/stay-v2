@@ -11,7 +11,7 @@ const TrendItem = ({ category, title, count }) => (
 
 export function RightPanel() {
   return (
-    <aside className="hidden xl:block w-[350px] pt-4 pl-8 h-[100dvh] sticky top-0">
+    <aside className="hidden xl:block w-[220px] pt-4 pl-8 h-[100dvh] sticky top-0">
       <div className="relative group mb-6">
         <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
           <Search size={18} className="text-zinc-500 group-focus-within:text-zinc-950 dark:group-focus-within:text-zinc-50 transition-colors" />
