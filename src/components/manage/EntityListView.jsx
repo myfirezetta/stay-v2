@@ -93,11 +93,24 @@ export function EntityListView({ entityType, currentUser }) {
       return 'Overdue';
     }
     
-    if (item.StartDate) {
+    if (item.Status && item.Status.toLowerCase() === 'ongoing') {
       return 'Ongoing';
     }
     
-    return 'New';
+    return item.Status ? item.Status : 'New';
+  };
+
+  const getPriorityBadge = (item) => {
+    if (!item.DueDate || (item.Status && item.Status.toLowerCase() === 'done')) return null;
+    const now = new Date();
+    const due = new Date(item.DueDate);
+    if (due < now) return null; // handled by overdue
+    
+    const daysUntilDue = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+    if (daysUntilDue <= 3) {
+      return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400 mt-1 inline-block">High Priority</span>;
+    }
+    return null;
   };
 
   const getStatusBadge = (status) => {
@@ -108,9 +121,8 @@ export function EntityListView({ entityType, currentUser }) {
         return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400">Overdue</span>;
       case 'ongoing':
         return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">Ongoing</span>;
-      case 'new':
       default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">New</span>;
+        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{status}</span>;
     }
   };
 
@@ -172,7 +184,12 @@ export function EntityListView({ entityType, currentUser }) {
       return (
         <tr key={item.Id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
           <td className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-100">{item.Title}</td>
-          <td className="px-6 py-4">{getStatusBadge(smartStatus)}</td>
+          <td className="px-6 py-4">
+            <div className="flex flex-col gap-1 items-start">
+              {getStatusBadge(smartStatus)}
+              {getPriorityBadge(item)}
+            </div>
+          </td>
           <td className="px-6 py-4">
             <div className="flex flex-col text-xs text-zinc-500 gap-0.5">
               <span>S: {item.StartDate ? new Date(item.StartDate).toLocaleDateString() : '-'}</span>
@@ -196,7 +213,7 @@ export function EntityListView({ entityType, currentUser }) {
             >
               <Trash2 size={16} />
             </button>
-            {['New', 'Todo'].includes(smartStatus) && (
+            {['New', 'Todo', 'Open'].includes(smartStatus) && (
               <button 
                 onClick={() => startTask(item.Id, isTicket)}
                 title="Start Work"
