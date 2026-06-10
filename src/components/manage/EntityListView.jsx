@@ -196,7 +196,7 @@ export function EntityListView({ entityType, currentUser }) {
             >
               <Trash2 size={16} />
             </button>
-            {['New', 'Todo'].includes(smartStatus) && (!item.AssigneeId || item.AssigneeId === currentUser?.id) && (
+            {['New', 'Todo'].includes(smartStatus) && (
               <button 
                 onClick={() => startTask(item.Id, isTicket)}
                 title="Start Work"
@@ -205,7 +205,7 @@ export function EntityListView({ entityType, currentUser }) {
                 <Clock size={16} />
               </button>
             )}
-            {smartStatus === 'Ongoing' && (!item.AssigneeId || item.AssigneeId === currentUser?.id) && (
+            {smartStatus === 'Ongoing' && (
               <button 
                 onClick={() => markAsDone(item.Id, isTicket)}
                 title="Mark Done"
