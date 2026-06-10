@@ -85,6 +85,24 @@ export function EntityListView({ entityType, currentUser }) {
     }
   };
 
+  const reopenTask = async (id, isTicket) => {
+    const endpoint = isTicket ? `/api/tickets/${id}` : `/api/tasks/${id}/status`;
+    try {
+      const item = data.find(d => d.Id === id);
+      await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser ? { 'X-User-Id': currentUser.id.toString() } : {})
+        },
+        body: JSON.stringify({ ...(isTicket ? item : {}), status: 'Ongoing', doneDate: null })
+      });
+      fetchData(); // refresh list
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const getSmartStatus = (item) => {
     if (item.Status && item.Status.toLowerCase() === 'done') return 'Done';
     
@@ -237,6 +255,15 @@ export function EntityListView({ entityType, currentUser }) {
                 className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors"
               >
                 <CheckCircle size={16} />
+              </button>
+            )}
+            {smartStatus === 'Done' && (
+              <button 
+                onClick={() => reopenTask(item.Id, isTicket)}
+                title="Reopen"
+                className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 hover:text-purple-700 dark:hover:text-purple-400 transition-colors"
+              >
+                <Clock size={16} />
               </button>
             )}
           </td>

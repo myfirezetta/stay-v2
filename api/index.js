@@ -488,8 +488,8 @@ app.patch('/api/tasks/:id/status', async (req, res) => {
   try {
     const { status, startDate, doneDate } = req.body;
     let updatePayload = { Status: status };
-    if (startDate) updatePayload.StartDate = startDate;
-    if (doneDate) updatePayload.DoneDate = doneDate;
+    if (startDate !== undefined) updatePayload.StartDate = startDate;
+    if (doneDate !== undefined) updatePayload.DoneDate = doneDate;
 
     const { data, error } = await supabase.from('Tasks').update(updatePayload).eq('Id', req.params.id).select();
     if (error) throw error;
