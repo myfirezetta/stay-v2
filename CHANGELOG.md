@@ -7,6 +7,7 @@
   - Added a `Reopen as Ongoing` button for Done, Closed, and Archived tasks.
 - **Attachment Viewing**: Added an inline 'View Upload' button directly in the main Entity List for tasks and tickets with uploaded files, allowing quick download and viewing.
 - **Multiple Assignees**: Upgraded the Assignee system across the database, API, and UI to support assigning a single Task or Ticket to multiple users simultaneously via an intuitive checkbox list.
+- **User Segments & Tagging**: Added Department and Group assignments to User profiles. The Feed composer now supports tagging Roles (`@r:`), Departments (`@d:`), and Groups (`@g:`), broadcasting messages directly to all users within those segments.
 
 ## 2026-06-10
 - **Authorship Tracking**: Added a `CreatorId` (Posted by) column to Tasks and Tickets tables to track who created the item.

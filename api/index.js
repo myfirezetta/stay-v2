@@ -46,13 +46,13 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function getUserAuth(req) {
   const userId = req.headers['x-user-id'];
-  if (!userId) return { id: 1, role: 'Admin' }; // Fallback
+  if (!userId) return { id: 1, role: 'Admin', departmentId: null, groupId: null }; // Fallback
   
-  const { data, error } = await supabase.from('Users').select('Id, Role').eq('Id', userId);
+  const { data, error } = await supabase.from('Users').select('Id, Role, DepartmentId, GroupId').eq('Id', userId);
   if (data && data.length > 0) {
-    return { id: data[0].Id, role: data[0].Role };
+    return { id: data[0].Id, role: data[0].Role, departmentId: data[0].DepartmentId, groupId: data[0].GroupId };
   }
-  return { id: parseInt(userId), role: 'Member' };
+  return { id: parseInt(userId), role: 'Member', departmentId: null, groupId: null };
 }
 
 // FEED
@@ -85,6 +85,9 @@ app.get('/api/feed', async (req, res) => {
             if (tag.type === 'project' && allowedProjectIds.includes(parseInt(tag.id))) return true;
             if (tag.type === 'task' && allowedTaskIds.includes(parseInt(tag.id))) return true;
             if (tag.type === 'ticket' && allowedTicketIds.includes(parseInt(tag.id))) return true;
+            if (tag.type === 'group' && parseInt(tag.id) === auth.groupId) return true;
+            if (tag.type === 'dept' && parseInt(tag.id) === auth.departmentId) return true;
+            if (tag.type === 'role' && tag.id === auth.role) return true;
           }
         } catch (e) {}
         return false;
@@ -155,19 +158,22 @@ app.get('/api/lookup', async (req, res) => {
       const s = await supabase.from('Systems').select('Id, Name').in('Id', sysIds.length ? sysIds : [0]); systems = s.data;
     }
     
-    const { data: users } = await supabase.from('Users').select('Id, DisplayName');
+    const { data: usersData } = await supabase.from('Users').select('Id, DisplayName, Role');
     const { data: groups } = await supabase.from('Groups').select('Id, Name');
     const { data: departments } = await supabase.from('Departments').select('Id, Name');
+    
+    const uniqueRoles = Array.from(new Set((usersData || []).map(u => u.Role).filter(Boolean)));
     
     res.json({
       projects: projects?.map(i => ({id: i.Id, name: i.Name})) || [],
       tasks: tasks?.map(i => ({id: i.Id, title: i.Title})) || [],
       tickets: tickets?.map(i => ({id: i.Id, title: i.Title})) || [],
-      users: users?.map(i => ({id: i.Id, name: i.DisplayName})) || [],
+      users: usersData?.map(i => ({id: i.Id, name: i.DisplayName})) || [],
       milestones: milestones?.map(i => ({id: i.Id, title: i.Title})) || [],
       systems: systems?.map(i => ({id: i.Id, name: i.Name})) || [],
       groups: groups?.map(i => ({id: i.Id, name: i.Name})) || [],
-      departments: departments?.map(i => ({id: i.Id, name: i.Name})) || []
+      departments: departments?.map(i => ({id: i.Id, name: i.Name})) || [],
+      roles: uniqueRoles.map(r => ({id: r, name: r}))
     });
   } catch (err) { res.status(500).send(err.message); }
 });
@@ -211,9 +217,9 @@ app.post('/api/auth/change-password', async (req, res) => {
 
 app.post('/api/users', async (req, res) => {
   try {
-    const { displayName, email, role, status, description } = req.body;
+    const { displayName, email, role, status, description, departmentId, groupId } = req.body;
     const hash = await bcrypt.hash('Password123!', 10);
-    const { data, error } = await supabase.from('Users').insert({ DisplayName: displayName, Email: email, Role: role || 'Member', Status: status || 'Active', Description: description || '', PasswordHash: hash, RequiresPasswordChange: 1 }).select();
+    const { data, error } = await supabase.from('Users').insert({ DisplayName: displayName, Email: email, Role: role || 'Member', Status: status || 'Active', Description: description || '', DepartmentId: departmentId || null, GroupId: groupId || null, PasswordHash: hash, RequiresPasswordChange: 1 }).select();
     if (error) throw error;
     io.emit('db_updated');
     res.json(data[0]);
@@ -222,8 +228,8 @@ app.post('/api/users', async (req, res) => {
 
 app.patch('/api/users/:id', async (req, res) => {
   try {
-    const { displayName, email, role, status, description } = req.body;
-    const { data, error } = await supabase.from('Users').update({ DisplayName: displayName, Email: email, Role: role, Status: status, Description: description }).eq('Id', req.params.id).select();
+    const { displayName, email, role, status, description, departmentId, groupId } = req.body;
+    const { data, error } = await supabase.from('Users').update({ DisplayName: displayName, Email: email, Role: role, Status: status, Description: description, DepartmentId: departmentId || null, GroupId: groupId || null }).eq('Id', req.params.id).select();
     if (error) throw error;
     io.emit('db_updated');
     res.json(data[0]);

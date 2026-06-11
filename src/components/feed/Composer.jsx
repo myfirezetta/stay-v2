@@ -57,6 +57,7 @@ export function Composer({ parentId = null, onSuccess = null, compact = false, c
        if (!prefix || prefix === 'u:') items.push(...(lookupData.users || []).map(u => ({...u, type: 'User', prefix: '@u:'})));
        if (!prefix || prefix === 'g:') items.push(...(lookupData.groups || []).map(g => ({...g, type: 'Group', prefix: '@g:'})));
        if (!prefix || prefix === 'd:') items.push(...(lookupData.departments || []).map(d => ({...d, type: 'Dept', prefix: '@d:'})));
+       if (!prefix || prefix === 'r:') items.push(...(lookupData.roles || []).map(r => ({...r, type: 'Role', prefix: '@r:'})));
     } else if (symbol === '*') {
        items = (lookupData.milestones || []).map(m => ({...m, type: 'Milestone', prefix: '*m:'}));
     } else if (symbol === '!') {

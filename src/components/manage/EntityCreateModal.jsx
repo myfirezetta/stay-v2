@@ -19,7 +19,9 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
           assigneeIds: editItem.AssigneeIds || [],
           startDate: editItem.StartDate ? editItem.StartDate.split('T')[0] : '',
           dueDate: editItem.DueDate ? editItem.DueDate.split('T')[0] : '',
-          attachmentUrl: editItem.AttachmentUrl || ''
+          attachmentUrl: editItem.AttachmentUrl || '',
+          departmentId: editItem.DepartmentId || '',
+          groupId: editItem.GroupId || ''
         });
       } else {
         setFormData({});
@@ -256,6 +258,24 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
             className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500" 
             placeholder="user@example.com" 
           />
+        </div>
+      );
+      fields.push(
+        <div key="department" className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Department</label>
+          <select name="departmentId" value={formData.departmentId || ''} onChange={handleInputChange} className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">Select Department...</option>
+            {lookupData?.departments?.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </div>
+      );
+      fields.push(
+        <div key="group" className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Group</label>
+          <select name="groupId" value={formData.groupId || ''} onChange={handleInputChange} className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">Select Group...</option>
+            {lookupData?.groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
         </div>
       );
     }
