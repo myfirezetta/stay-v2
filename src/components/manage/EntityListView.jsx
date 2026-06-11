@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Plus, CheckCircle, Clock, Check, Edit2, Trash2, Archive, XCircle } from 'lucide-react';
+import { Plus, CheckCircle, Clock, Check, Edit2, Trash2, Archive, XCircle, Paperclip } from 'lucide-react';
 import { EntityCreateModal } from './EntityCreateModal';
 
 export function EntityListView({ entityType, currentUser }) {
@@ -245,7 +245,16 @@ export function EntityListView({ entityType, currentUser }) {
       const isTicket = entityType === 'Tickets';
       return (
         <tr key={item.Id} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
-          <td className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-100">{item.Title}</td>
+          <td className="px-6 py-4">
+            <div className="flex flex-col gap-1">
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">{item.Title}</span>
+              {item.AttachmentUrl && (
+                <a href={item.AttachmentUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 mt-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline w-fit bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded">
+                  <Paperclip size={12} /> View Upload
+                </a>
+              )}
+            </div>
+          </td>
           <td className="px-6 py-4">
             <div className="flex flex-col gap-1 items-start">
               {getStatusBadge(smartStatus)}
