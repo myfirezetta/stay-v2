@@ -270,8 +270,13 @@ export function EntityListView({ entityType, currentUser }) {
           </td>
           <td className="px-6 py-4">
             <div className="flex flex-col text-xs gap-1">
-              {item.CreatorId && <div className="text-zinc-600 dark:text-zinc-400"><span className="font-semibold text-zinc-500">Posted by:</span> {users.find(u => u.id === item.CreatorId)?.name || 'Unknown'}</div>}
-              {item.AssigneeId && <div className="text-zinc-600 dark:text-zinc-400"><span className="font-semibold text-zinc-500">Assignee:</span> {users.find(u => u.id === item.AssigneeId)?.name || 'Unknown'}</div>}
+              {item.CreatorId && <div className="text-zinc-600 dark:text-zinc-400"><span className="font-semibold text-zinc-500">Posted by:</span> {users.find(u => u.Id === item.CreatorId)?.DisplayName || 'Unknown'}</div>}
+              {item.AssigneeIds && item.AssigneeIds.length > 0 && (
+                <div className="text-zinc-600 dark:text-zinc-400">
+                  <span className="font-semibold text-zinc-500">Assignees:</span>{' '}
+                  {item.AssigneeIds.map(id => users.find(u => u.Id === id)?.DisplayName || 'Unknown').join(', ')}
+                </div>
+              )}
             </div>
           </td>
           <td className="px-6 py-4">{calculatePerformance(item)}</td>

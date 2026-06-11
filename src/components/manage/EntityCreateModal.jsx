@@ -16,7 +16,7 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
           description: editItem.Description || '',
           email: editItem.Email || '',
           projectId: editItem.ProjectId || '',
-          assigneeId: editItem.AssigneeId || '',
+          assigneeIds: editItem.AssigneeIds || [],
           startDate: editItem.StartDate ? editItem.StartDate.split('T')[0] : '',
           dueDate: editItem.DueDate ? editItem.DueDate.split('T')[0] : '',
           attachmentUrl: editItem.AttachmentUrl || ''
@@ -183,12 +183,27 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
 
       if (['Tasks', 'Tickets'].includes(entityType)) {
         fields.push(
-          <div key="assignee" className="flex flex-col gap-1.5">
-            <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Assignee</label>
-            <select name="assigneeId" value={formData.assigneeId || ''} onChange={handleInputChange} className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">Select Assignee...</option>
-              {lookupData.users?.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+          <div key="assignees" className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Assignees</label>
+            <div className="flex flex-col gap-2 max-h-40 overflow-y-auto p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+              {lookupData.users?.map(u => (
+                <label key={u.id} className="flex items-center gap-2 cursor-pointer text-sm text-zinc-950 dark:text-zinc-50">
+                  <input 
+                    type="checkbox" 
+                    checked={(formData.assigneeIds || []).includes(u.id)}
+                    onChange={(e) => {
+                      const current = formData.assigneeIds || [];
+                      const next = e.target.checked 
+                        ? [...current, u.id] 
+                        : current.filter(id => id !== u.id);
+                      setFormData(prev => ({ ...prev, assigneeIds: next }));
+                    }}
+                    className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {u.name}
+                </label>
+              ))}
+            </div>
           </div>
         );
       }
