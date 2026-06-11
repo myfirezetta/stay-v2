@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Plus, CheckCircle, Clock, Check, Edit2, Trash2 } from 'lucide-react';
+import { Plus, CheckCircle, Clock, Check, Edit2, Trash2, Archive, XCircle } from 'lucide-react';
 import { EntityCreateModal } from './EntityCreateModal';
 
 export function EntityListView({ entityType, currentUser }) {
@@ -95,7 +95,7 @@ export function EntityListView({ entityType, currentUser }) {
           'Content-Type': 'application/json',
           ...(currentUser ? { 'X-User-Id': currentUser.id.toString() } : {})
         },
-        body: JSON.stringify({ ...(isTicket ? item : {}), status: 'Ongoing', doneDate: null })
+        body: JSON.stringify({ ...(isTicket ? item : {}), status: 'Ongoing', doneDate: null, reopenedDate: new Date().toISOString() })
       });
       fetchData(); // refresh list
     } catch (e) {
@@ -103,7 +103,45 @@ export function EntityListView({ entityType, currentUser }) {
     }
   };
 
+  const closeTask = async (id, isTicket) => {
+    const endpoint = isTicket ? `/api/tickets/${id}` : `/api/tasks/${id}/status`;
+    try {
+      const item = data.find(d => d.Id === id);
+      await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser ? { 'X-User-Id': currentUser.id.toString() } : {})
+        },
+        body: JSON.stringify({ ...(isTicket ? item : {}), status: 'Close', closedDate: new Date().toISOString() })
+      });
+      fetchData();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const archiveTask = async (id, isTicket) => {
+    const endpoint = isTicket ? `/api/tickets/${id}` : `/api/tasks/${id}/status`;
+    try {
+      const item = data.find(d => d.Id === id);
+      await fetch(endpoint, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser ? { 'X-User-Id': currentUser.id.toString() } : {})
+        },
+        body: JSON.stringify({ ...(isTicket ? item : {}), status: 'Archive', archivedDate: new Date().toISOString() })
+      });
+      fetchData();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const getSmartStatus = (item) => {
+    if (item.Status && item.Status.toLowerCase() === 'archive') return 'Archive';
+    if (item.Status && item.Status.toLowerCase() === 'close') return 'Close';
     if (item.Status && item.Status.toLowerCase() === 'done') return 'Done';
     
     const now = new Date();
@@ -134,6 +172,10 @@ export function EntityListView({ entityType, currentUser }) {
 
   const getStatusBadge = (status) => {
     switch (status.toLowerCase()) {
+      case 'archive':
+        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-400">Archived</span>;
+      case 'close':
+        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">Closed</span>;
       case 'done':
         return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400">Done</span>;
       case 'overdue':
@@ -259,8 +301,26 @@ export function EntityListView({ entityType, currentUser }) {
             )}
             {smartStatus === 'Done' && (
               <button 
+                onClick={() => closeTask(item.Id, isTicket)}
+                title="Close Task"
+                className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+              >
+                <XCircle size={16} />
+              </button>
+            )}
+            {smartStatus === 'Close' && (
+              <button 
+                onClick={() => archiveTask(item.Id, isTicket)}
+                title="Archive Task"
+                className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
+              >
+                <Archive size={16} />
+              </button>
+            )}
+            {['Done', 'Close', 'Archive'].includes(smartStatus) && (
+              <button 
                 onClick={() => reopenTask(item.Id, isTicket)}
-                title="Reopen"
+                title="Reopen as Ongoing"
                 className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 hover:text-purple-700 dark:hover:text-purple-400 transition-colors"
               >
                 <Clock size={16} />

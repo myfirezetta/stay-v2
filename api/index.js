@@ -486,10 +486,13 @@ app.patch('/api/tasks/:id', async (req, res) => {
 
 app.patch('/api/tasks/:id/status', async (req, res) => {
   try {
-    const { status, startDate, doneDate } = req.body;
+    const { status, startDate, doneDate, closedDate, archivedDate, reopenedDate } = req.body;
     let updatePayload = { Status: status };
     if (startDate !== undefined) updatePayload.StartDate = startDate;
     if (doneDate !== undefined) updatePayload.DoneDate = doneDate;
+    if (closedDate !== undefined) updatePayload.ClosedDate = closedDate;
+    if (archivedDate !== undefined) updatePayload.ArchivedDate = archivedDate;
+    if (reopenedDate !== undefined) updatePayload.ReopenedDate = reopenedDate;
 
     const { data, error } = await supabase.from('Tasks').update(updatePayload).eq('Id', req.params.id).select();
     if (error) throw error;
@@ -530,8 +533,12 @@ app.post('/api/tickets', async (req, res) => {
 
 app.patch('/api/tickets/:id', async (req, res) => {
   try {
-    const { title, taskId, assigneeId, status, startDate, dueDate, doneDate, systemId, projectId, description, attachmentUrl } = req.body;
-    const { data, error } = await supabase.from('Tickets').update({ Title: title, TaskId: taskId, AssigneeId: assigneeId, Status: status, StartDate: startDate, DueDate: dueDate, DoneDate: doneDate, SystemId: systemId, ProjectId: projectId, Description: description, AttachmentUrl: attachmentUrl }).eq('Id', req.params.id).select();
+    const { title, taskId, assigneeId, status, startDate, dueDate, doneDate, closedDate, archivedDate, reopenedDate, systemId, projectId, description, attachmentUrl } = req.body;
+    const updatePayload = { Title: title, TaskId: taskId, AssigneeId: assigneeId, Status: status, StartDate: startDate, DueDate: dueDate, DoneDate: doneDate, SystemId: systemId, ProjectId: projectId, Description: description, AttachmentUrl: attachmentUrl };
+    if (closedDate !== undefined) updatePayload.ClosedDate = closedDate;
+    if (archivedDate !== undefined) updatePayload.ArchivedDate = archivedDate;
+    if (reopenedDate !== undefined) updatePayload.ReopenedDate = reopenedDate;
+    const { data, error } = await supabase.from('Tickets').update(updatePayload).eq('Id', req.params.id).select();
     if (error) throw error;
     io.emit('db_updated');
     res.json(data[0]);
