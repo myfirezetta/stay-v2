@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Save, AlertCircle } from 'lucide-react';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, editItem }) {
   const [formData, setFormData] = useState({});
@@ -21,7 +22,8 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
           dueDate: editItem.DueDate ? editItem.DueDate.split('T')[0] : '',
           attachmentUrl: editItem.AttachmentUrl || '',
           departmentId: editItem.DepartmentId || '',
-          groupId: editItem.GroupId || ''
+          groupId: editItem.GroupId || '',
+          role: editItem.Role || ''
         });
       } else {
         setFormData({});
@@ -175,10 +177,13 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
         fields.push(
           <div key="project" className="flex flex-col gap-1.5">
             <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Project</label>
-            <select name="projectId" value={formData.projectId || ''} onChange={handleInputChange} className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="">Select Project...</option>
-              {lookupData.projects?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchableSelect 
+              name="projectId" 
+              value={formData.projectId || ''} 
+              onChange={handleInputChange} 
+              placeholder="Select Project..."
+              options={(lookupData.projects || []).map(p => ({ value: p.id, label: p.name }))}
+            />
           </div>
         );
       }
@@ -261,21 +266,44 @@ export function EntityCreateModal({ isOpen, onClose, entityType, currentUser, ed
         </div>
       );
       fields.push(
+        <div key="role" className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Role</label>
+          <SearchableSelect 
+            name="role" 
+            value={formData.role || ''} 
+            onChange={handleInputChange} 
+            placeholder="Select Role..."
+            options={[
+              { value: 'Admin', label: 'Admin' },
+              { value: 'Manager', label: 'Manager' },
+              { value: 'Member', label: 'Member' },
+              ...(lookupData?.roles || []).filter(r => !['Admin', 'Manager', 'Member'].includes(r.id)).map(r => ({ value: r.id, label: r.name }))
+            ]}
+          />
+        </div>
+      );
+      fields.push(
         <div key="department" className="flex flex-col gap-1.5">
           <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Department</label>
-          <select name="departmentId" value={formData.departmentId || ''} onChange={handleInputChange} className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">Select Department...</option>
-            {lookupData?.departments?.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
+          <SearchableSelect 
+            name="departmentId" 
+            value={formData.departmentId || ''} 
+            onChange={handleInputChange} 
+            placeholder="Select Department..."
+            options={(lookupData?.departments || []).map(d => ({ value: d.id, label: d.name }))}
+          />
         </div>
       );
       fields.push(
         <div key="group" className="flex flex-col gap-1.5">
           <label className="text-sm font-bold text-zinc-950 dark:text-zinc-50">Group</label>
-          <select name="groupId" value={formData.groupId || ''} onChange={handleInputChange} className="w-full p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-950 dark:text-zinc-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <option value="">Select Group...</option>
-            {lookupData?.groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
+          <SearchableSelect 
+            name="groupId" 
+            value={formData.groupId || ''} 
+            onChange={handleInputChange} 
+            placeholder="Select Group..."
+            options={(lookupData?.groups || []).map(g => ({ value: g.id, label: g.name }))}
+          />
         </div>
       );
     }
