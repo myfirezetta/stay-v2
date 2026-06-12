@@ -94,12 +94,24 @@ app.get('/api/feed', async (req, res) => {
       });
     }
 
+    const { data: usersData } = await supabase.from('Users').select('Id, DisplayName, Avatar');
+    const usersMap = {};
+    if (usersData) {
+      usersData.forEach(u => usersMap[u.Id] = u);
+    }
+
     const posts = filteredItems.filter(i => !i.ParentId).sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));
     const replies = filteredItems.filter(i => i.ParentId);
     
     const formattedPosts = posts.map(post => ({
       ...post,
-      replies: replies.filter(r => r.ParentId === post.Id).sort((a, b) => new Date(a.CreatedAt) - new Date(b.CreatedAt))
+      AuthorName: usersMap[post.AuthorId]?.DisplayName || `User ${post.AuthorId}`,
+      AuthorAvatar: usersMap[post.AuthorId]?.Avatar,
+      replies: replies.filter(r => r.ParentId === post.Id).sort((a, b) => new Date(a.CreatedAt) - new Date(b.CreatedAt)).map(r => ({
+        ...r,
+        AuthorName: usersMap[r.AuthorId]?.DisplayName || `User ${r.AuthorId}`,
+        AuthorAvatar: usersMap[r.AuthorId]?.Avatar
+      }))
     }));
     
     res.json(formattedPosts);

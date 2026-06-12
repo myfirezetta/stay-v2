@@ -55,7 +55,7 @@ export function FeedItem({ item }) {
       <div className="flex gap-4">
         {/* Avatar */}
         <div className="w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center font-bold flex-shrink-0 mt-1">
-          U
+          {item.AuthorAvatar ? <img src={item.AuthorAvatar} className="w-full h-full rounded-full object-cover" /> : (item.AuthorName ? item.AuthorName.charAt(0).toUpperCase() : 'U')}
         </div>
         
         {/* Post Content */}
@@ -63,7 +63,7 @@ export function FeedItem({ item }) {
           {/* Header */}
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2 text-sm">
-              <span className="font-bold text-zinc-950 dark:text-zinc-50">User {item.AuthorId || 1}</span>
+              <span className="font-bold text-zinc-950 dark:text-zinc-50">{item.AuthorName || `User ${item.AuthorId || 1}`}</span>
               <span className="text-zinc-500">· {date}</span>
             </div>
             <button className="text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-50 transition-colors">
@@ -119,12 +119,12 @@ export function FeedItem({ item }) {
         <div className="pl-14 flex flex-col gap-4 mt-2">
           {item.replies.map((reply) => (
             <div key={reply.Id} className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center font-bold flex-shrink-0 text-xs">
-                U
+              <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 flex items-center justify-center font-bold text-xs flex-shrink-0 mt-1">
+                {reply.AuthorAvatar ? <img src={reply.AuthorAvatar} className="w-full h-full rounded-full object-cover" /> : (reply.AuthorName ? reply.AuthorName.charAt(0).toUpperCase() : 'U')}
               </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 text-xs mb-1">
-                  <span className="font-bold text-zinc-950 dark:text-zinc-50">User {reply.AuthorId || 1}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 text-sm mb-1">
+                  <span className="font-bold text-zinc-950 dark:text-zinc-50">{reply.AuthorName || `User ${reply.AuthorId || 1}`}</span>
                   <span className="text-zinc-500">· {new Date(reply.CreatedAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}</span>
                 </div>
                 <div className="text-base text-zinc-900 dark:text-zinc-100 leading-snug">
