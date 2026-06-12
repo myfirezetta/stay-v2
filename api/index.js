@@ -94,10 +94,12 @@ app.get('/api/feed', async (req, res) => {
       });
     }
 
-    const { data: usersData } = await supabase.from('Users').select('Id, DisplayName, Avatar');
+    const { data: usersData, error: userErr } = await supabase.from('Users').select('Id, DisplayName');
     const usersMap = {};
     if (usersData) {
       usersData.forEach(u => usersMap[u.Id] = u);
+    } else if (userErr) {
+      console.error("Users fetch error:", userErr);
     }
 
     const posts = filteredItems.filter(i => !i.ParentId).sort((a, b) => new Date(b.CreatedAt) - new Date(a.CreatedAt));
@@ -124,8 +126,16 @@ app.patch('/api/feed/:id', async (req, res) => {
     const { data, error } = await supabase.from('Feed').update({ Content: content, ParsedTags: JSON.stringify(parsedTags) }).eq('Id', req.params.id).select();
     if (error) throw error;
     if (!data || data.length === 0) return res.status(404).send('Feed not found');
-    io.emit('feed_updated', data[0]);
-    res.json(data[0]);
+    
+    const { data: usersData } = await supabase.from('Users').select('Id, DisplayName');
+    const author = usersData?.find(u => u.Id === data[0].AuthorId);
+    const postWithAuthor = {
+      ...data[0],
+      AuthorName: author?.DisplayName || `User ${data[0].AuthorId}`
+    };
+    
+    io.emit('feed_updated', postWithAuthor);
+    res.json(postWithAuthor);
   } catch (err) { res.status(500).send(err.message); }
 });
 
@@ -818,8 +828,13 @@ app.post('/api/feed', async (req, res) => {
     
     if (error) throw error;
     if (resData && resData.length > 0) {
-      io.emit('feed_added', resData[0]);
-      res.json(resData[0]);
+      const author = users?.find(u => u.Id === resData[0].AuthorId);
+      const postWithAuthor = {
+        ...resData[0],
+        AuthorName: author?.DisplayName || `User ${resData[0].AuthorId}`
+      };
+      io.emit('feed_added', postWithAuthor);
+      res.json(postWithAuthor);
     } else {
       res.status(500).send('Failed to create feed');
     }
