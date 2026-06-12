@@ -890,7 +890,7 @@ app.post('/api/feed', async (req, res) => {
       });
 
       for (let uid of impactedUserIds) {
-        let nLink = '/feed';
+        let nLink = '/feed?post=' + (parentId || resData[0].Id);
         let nTitle = `${author?.DisplayName || 'Someone'} mentioned you`;
         if (isNewTask && taskId) { nLink = '/tasks'; nTitle = `${author?.DisplayName || 'Someone'} assigned you a new task`; }
         if (isNewIssue && ticketId) { nLink = '/tickets'; nTitle = `${author?.DisplayName || 'Someone'} created a ticket involving you`; }
