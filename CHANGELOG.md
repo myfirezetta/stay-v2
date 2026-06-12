@@ -1,5 +1,11 @@
 # SymboFlow Changelog
 
+## 2026-06-12
+- **Persistent Notification System**: Added a robust notification engine powered by Supabase and Socket.IO. When a user, role, department, or group is tagged in a post or assigned a task, targeted notifications are automatically generated for all relevant users.
+- **Real-Time Toast Alerts**: Floating notification popups appear instantly when users receive a live mention or assignment.
+- **Notifications Hub**: Added a dedicated Notifications tab in the sidebar with a dynamic unread badge. Users can view their mention history and mark items as read.
+- **Contextual Feed Navigation**: Clicking on a feed notification now navigates directly to an isolated "Focused Conversation" view of that specific thread, instead of dumping the user into the massive main feed list.
+
 ## 2026-06-11
 - **Status Lifecycle Extension**: Added `Closed` and `Archived` statuses.
   - Implemented exact timestamps tracking for `ClosedDate`, `ArchivedDate`, and `ReopenedDate` in Supabase.
