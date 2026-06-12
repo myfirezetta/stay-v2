@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Home, Compass, User, Settings, Layers, Moon, Sun, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, Compass, User, Settings, Layers, Moon, Sun, LogOut, ChevronLeft, ChevronRight, Bell } from 'lucide-react';
 
-const NavItem = ({ icon: Icon, label, isActive, onClick, isCollapsed }) => {
+const NavItem = ({ icon: Icon, label, isActive, onClick, isCollapsed, badge }) => {
   return (
     <div className="relative group w-full flex">
       <motion.button
@@ -13,7 +13,14 @@ const NavItem = ({ icon: Icon, label, isActive, onClick, isCollapsed }) => {
           isActive ? 'font-bold text-zinc-950 dark:text-zinc-50' : 'font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-50'
         }`}
       >
-        <Icon size={26} strokeWidth={isActive ? 2.5 : 2} className={isActive ? "text-zinc-950 dark:text-zinc-50" : "text-zinc-600 dark:text-zinc-400"} />
+        <div className="relative">
+          <Icon size={26} strokeWidth={isActive ? 2.5 : 2} className={isActive ? "text-zinc-950 dark:text-zinc-50" : "text-zinc-600 dark:text-zinc-400"} />
+          {badge > 0 && (
+            <div className="absolute -top-1 -right-1 bg-indigo-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white dark:border-zinc-950 min-w-[20px] text-center">
+              {badge > 99 ? '99+' : badge}
+            </div>
+          )}
+        </div>
         <span className={`text-xl tracking-tight hidden ${isCollapsed ? '' : 'lg:block'}`}>{label}</span>
       </motion.button>
       
@@ -26,7 +33,7 @@ const NavItem = ({ icon: Icon, label, isActive, onClick, isCollapsed }) => {
   );
 };
 
-export function Sidebar({ onManageClick, activeTab, onTabChange, onLogout, currentUser }) {
+export function Sidebar({ onManageClick, activeTab, onTabChange, onLogout, currentUser, unreadNotifications = 0 }) {
   const [isDark, setIsDark] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -58,6 +65,7 @@ export function Sidebar({ onManageClick, activeTab, onTabChange, onLogout, curre
 
       <nav className="flex flex-col gap-2 w-auto lg:w-full">
         <NavItem icon={Home} label="Home" isActive={activeTab === 'Home'} onClick={() => onTabChange('Home')} isCollapsed={isCollapsed} />
+        <NavItem icon={Bell} label="Notifications" isActive={activeTab === 'Notifications'} onClick={() => onTabChange('Notifications')} isCollapsed={isCollapsed} badge={unreadNotifications} />
         <NavItem icon={Compass} label="Explore" isActive={activeTab === 'Explore'} onClick={() => onTabChange('Explore')} isCollapsed={isCollapsed} />
         <NavItem icon={Layers} label="Manage" onClick={onManageClick} isCollapsed={isCollapsed} />
         <NavItem icon={isDark ? Sun : Moon} label="Theme" onClick={toggleTheme} isCollapsed={isCollapsed} />

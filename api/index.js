@@ -258,6 +258,33 @@ app.patch('/api/users/:id', async (req, res) => {
   } catch (err) { res.status(500).send(err.message); }
 });
 
+// NOTIFICATIONS
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || 1;
+    const { data, error } = await supabase.from('Notifications').select('*').eq('UserId', userId).order('CreatedAt', { ascending: false }).limit(50);
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).send(err.message); }
+});
+
+app.patch('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('Notifications').update({ IsRead: true }).eq('Id', req.params.id).select();
+    if (error) throw error;
+    res.json(data[0]);
+  } catch (err) { res.status(500).send(err.message); }
+});
+
+app.patch('/api/notifications/read-all', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || 1;
+    const { data, error } = await supabase.from('Notifications').update({ IsRead: true }).eq('UserId', userId).eq('IsRead', false).select();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) { res.status(500).send(err.message); }
+});
+
 // Projects
 app.get('/api/projects', async (req, res) => {
   try {
@@ -748,10 +775,12 @@ app.post('/api/feed', async (req, res) => {
     let taskId = null;
     let ticketId = null;
     
-    const { data: users } = await supabase.from('Users').select('Id, DisplayName');
+    const { data: users } = await supabase.from('Users').select('Id, DisplayName, Role, DepartmentId, GroupId');
     const { data: projects } = await supabase.from('Projects').select('Id, Name');
     const { data: tasks } = await supabase.from('Tasks').select('Id, Title, ProjectId');
     const { data: tickets } = await supabase.from('Tickets').select('Id, Title');
+    const { data: departments } = await supabase.from('Departments').select('Id, Name');
+    const { data: groups } = await supabase.from('Groups').select('Id, Name');
 
     const clean = (str) => (str || '').replace(/\s+/g, '').toLowerCase();
 
@@ -759,8 +788,25 @@ app.post('/api/feed', async (req, res) => {
     for (let tag of parsedTags || []) {
       const val = clean(tag.value);
       if (tag.symbol === '@') {
-        const user = users?.find(u => clean(u.DisplayName) === val);
-        if (user) { assignedUserId = user.Id; resolvedTags.push({ type: 'user', id: user.Id }); }
+        if (val.startsWith('u:')) {
+          const name = val.substring(2);
+          const user = users?.find(u => clean(u.DisplayName) === name);
+          if (user) { assignedUserId = user.Id; resolvedTags.push({ type: 'user', id: user.Id }); }
+        } else if (val.startsWith('r:')) {
+          const roleName = val.substring(2);
+          resolvedTags.push({ type: 'role', id: roleName });
+        } else if (val.startsWith('d:')) {
+          const deptName = val.substring(2);
+          const dept = departments?.find(d => clean(d.Name) === deptName);
+          if (dept) resolvedTags.push({ type: 'department', id: dept.Id });
+        } else if (val.startsWith('g:')) {
+          const groupName = val.substring(2);
+          const grp = groups?.find(g => clean(g.Name) === groupName);
+          if (grp) resolvedTags.push({ type: 'group', id: grp.Id });
+        } else {
+          const user = users?.find(u => clean(u.DisplayName) === val);
+          if (user) { assignedUserId = user.Id; resolvedTags.push({ type: 'user', id: user.Id }); }
+        }
       } else if (tag.symbol === '#') {
         const proj = projects?.find(p => clean(p.Name) === val);
         if (proj) { projectId = proj.Id; resolvedTags.push({ type: 'project', id: proj.Id }); }
@@ -834,6 +880,34 @@ app.post('/api/feed', async (req, res) => {
         AuthorName: author?.DisplayName || `User ${resData[0].AuthorId}`
       };
       io.emit('feed_added', postWithAuthor);
+      
+      const impactedUserIds = new Set();
+      resolvedTags.forEach(tag => {
+        if (tag.type === 'user') impactedUserIds.add(tag.id);
+        if (tag.type === 'role') users?.filter(u => clean(u.Role) === clean(tag.id)).forEach(u => impactedUserIds.add(u.Id));
+        if (tag.type === 'department') users?.filter(u => u.DepartmentId === tag.id).forEach(u => impactedUserIds.add(u.Id));
+        if (tag.type === 'group') users?.filter(u => u.GroupId === tag.id).forEach(u => impactedUserIds.add(u.Id));
+      });
+      impactedUserIds.delete(resData[0].AuthorId);
+
+      for (let uid of impactedUserIds) {
+        let nLink = '/feed';
+        let nTitle = `${author?.DisplayName || 'Someone'} mentioned you`;
+        if (isNewTask && taskId) { nLink = '/tasks'; nTitle = `${author?.DisplayName || 'Someone'} assigned you a new task`; }
+        if (isNewIssue && ticketId) { nLink = '/tickets'; nTitle = `${author?.DisplayName || 'Someone'} created a ticket involving you`; }
+        
+        const { data: notif } = await supabase.from('Notifications').insert({
+          UserId: uid,
+          Title: nTitle,
+          Content: title || content.substring(0, 80),
+          Link: nLink
+        }).select();
+        
+        if (notif && notif.length > 0) {
+          io.emit(`notification_${uid}`, notif[0]);
+        }
+      }
+      
       res.json(postWithAuthor);
     } else {
       res.status(500).send('Failed to create feed');

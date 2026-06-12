@@ -5,17 +5,56 @@ import { FeedList } from './components/feed/FeedList';
 import { ManagementDrawer } from './components/manage/ManagementDrawer';
 import { EntityListView } from './components/manage/EntityListView';
 import { LoginView } from './components/auth/LoginView';
+import { NotificationsView } from './components/notifications/NotificationsView';
+import { NotificationToast } from './components/notifications/NotificationToast';
+import { io } from 'socket.io-client';
+
+const socket = io('');
 
 function App() {
   const [isManageOpen, setIsManageOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('Home');
   const [manageEntity, setManageEntity] = useState('Projects');
-  // Temporarily bypass login by defaulting to Alice (Admin)
   const [currentUser, setCurrentUser] = useState({ id: 1, displayName: 'Alice', role: 'Admin' });
+  const [notifications, setNotifications] = useState([]);
+  const [activeToast, setActiveToast] = useState(null);
 
   if (!currentUser) {
     return <LoginView onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
+
+  React.useEffect(() => {
+    if (!currentUser) return;
+    
+    fetch('/api/notifications', {
+      headers: { 'x-user-id': currentUser.id }
+    })
+      .then(res => res.json())
+      .then(data => Array.isArray(data) && setNotifications(data))
+      .catch(console.error);
+
+    const handleNewNotif = (notif) => {
+      setNotifications(prev => [notif, ...prev]);
+      setActiveToast(notif);
+      setTimeout(() => setActiveToast(null), 5000);
+    };
+
+    socket.on(`notification_${currentUser.id}`, handleNewNotif);
+    return () => socket.off(`notification_${currentUser.id}`, handleNewNotif);
+  }, [currentUser]);
+
+  const handleMarkAsRead = (id) => {
+    fetch(`/api/notifications/${id}/read`, { method: 'PATCH' })
+      .then(() => setNotifications(prev => prev.map(n => n.Id === id ? { ...n, IsRead: true } : n)));
+  };
+
+  const handleMarkAllAsRead = () => {
+    fetch('/api/notifications/read-all', { 
+      method: 'PATCH',
+      headers: { 'x-user-id': currentUser.id }
+    })
+      .then(() => setNotifications(prev => prev.map(n => ({ ...n, IsRead: true }))));
+  };
 
   const handleLogout = () => {
     setCurrentUser(null);
@@ -24,6 +63,7 @@ function App() {
   return (
     <AppLayout 
       currentUser={currentUser}
+      unreadNotifications={notifications.filter(n => !n.IsRead).length}
       onManageClick={() => setIsManageOpen(true)}
       activeTab={activeTab}
       onTabChange={(tab) => {
@@ -71,6 +111,21 @@ function App() {
         <EntityListView entityType={manageEntity} currentUser={currentUser} />
       )}
 
+      {activeTab === 'Notifications' && (
+        <NotificationsView 
+          currentUser={currentUser}
+          notifications={notifications}
+          onMarkAsRead={handleMarkAsRead}
+          onMarkAllAsRead={handleMarkAllAsRead}
+          onNavigate={(path) => {
+             // For now we just switch tab based on link. In a real router, we'd navigate
+             if (path.includes('task')) { setActiveTab('Manage'); setManageEntity('Tasks'); }
+             else if (path.includes('ticket')) { setActiveTab('Manage'); setManageEntity('Tickets'); }
+             else { setActiveTab('Home'); }
+          }}
+        />
+      )}
+
       {/* Drawers */}
       <ManagementDrawer 
         isOpen={isManageOpen} 
@@ -81,6 +136,16 @@ function App() {
           setActiveTab('Manage');
           setIsManageOpen(false);
         }}
+      />
+
+      <NotificationToast 
+        toast={activeToast} 
+        onClose={() => setActiveToast(null)} 
+        onNavigate={(path) => {
+           if (path.includes('task')) { setActiveTab('Manage'); setManageEntity('Tasks'); }
+           else if (path.includes('ticket')) { setActiveTab('Manage'); setManageEntity('Tickets'); }
+           else { setActiveTab('Home'); }
+        }} 
       />
     </AppLayout>
   );
