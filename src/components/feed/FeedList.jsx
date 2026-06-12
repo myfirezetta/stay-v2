@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { FeedItem } from './FeedItem';
 
+import { ArrowLeft } from 'lucide-react';
+
 const socket = io('');
 
-export function FeedList({ currentUser }) {
+export function FeedList({ currentUser, focusedPostId, onClearFocus }) {
   const [feed, setFeed] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -89,9 +91,27 @@ export function FeedList({ currentUser }) {
     );
   }
 
+  const displayFeed = focusedPostId ? feed.filter(item => item.Id === focusedPostId || (item.replies && item.replies.some(r => r.Id === focusedPostId))) : feed;
+
   return (
     <div className="flex flex-col pb-20">
-      {feed.map(item => (
+      {focusedPostId && (
+        <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-3">
+          <button 
+            onClick={onClearFocus}
+            className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-50 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <span className="font-medium text-zinc-900 dark:text-zinc-50">Focused Conversation</span>
+        </div>
+      )}
+      
+      {displayFeed.length === 0 && focusedPostId && (
+         <div className="p-8 text-center text-zinc-500">Post not found.</div>
+      )}
+
+      {displayFeed.map(item => (
         <FeedItem key={item.Id} item={item} />
       ))}
     </div>

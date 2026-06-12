@@ -18,6 +18,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState({ id: 1, displayName: 'Alice', role: 'Admin' });
   const [notifications, setNotifications] = useState([]);
   const [activeToast, setActiveToast] = useState(null);
+  const [focusedPostId, setFocusedPostId] = useState(null);
 
   if (!currentUser) {
     return <LoginView onLoginSuccess={(user) => setCurrentUser(user)} />;
@@ -69,6 +70,7 @@ function App() {
       onTabChange={(tab) => {
         setActiveTab(tab);
         setIsManageOpen(false);
+        setFocusedPostId(null);
       }}
       onLogout={handleLogout}
     >
@@ -81,7 +83,7 @@ function App() {
       {activeTab === 'Home' && (
         <>
           <Composer currentUser={currentUser} />
-          <FeedList currentUser={currentUser} />
+          <FeedList currentUser={currentUser} focusedPostId={focusedPostId} onClearFocus={() => setFocusedPostId(null)} />
         </>
       )}
 
@@ -118,10 +120,13 @@ function App() {
           onMarkAsRead={handleMarkAsRead}
           onMarkAllAsRead={handleMarkAllAsRead}
           onNavigate={(path) => {
-             // For now we just switch tab based on link. In a real router, we'd navigate
-             if (path.includes('task')) { setActiveTab('Manage'); setManageEntity('Tasks'); }
+             if (path.includes('?post=')) {
+                const pid = parseInt(path.split('?post=')[1]);
+                setFocusedPostId(pid);
+                setActiveTab('Home');
+             } else if (path.includes('task')) { setActiveTab('Manage'); setManageEntity('Tasks'); }
              else if (path.includes('ticket')) { setActiveTab('Manage'); setManageEntity('Tickets'); }
-             else { setActiveTab('Home'); }
+             else { setActiveTab('Home'); setFocusedPostId(null); }
           }}
         />
       )}
@@ -142,9 +147,13 @@ function App() {
         toast={activeToast} 
         onClose={() => setActiveToast(null)} 
         onNavigate={(path) => {
-           if (path.includes('task')) { setActiveTab('Manage'); setManageEntity('Tasks'); }
+           if (path.includes('?post=')) {
+              const pid = parseInt(path.split('?post=')[1]);
+              setFocusedPostId(pid);
+              setActiveTab('Home');
+           } else if (path.includes('task')) { setActiveTab('Manage'); setManageEntity('Tasks'); }
            else if (path.includes('ticket')) { setActiveTab('Manage'); setManageEntity('Tickets'); }
-           else { setActiveTab('Home'); }
+           else { setActiveTab('Home'); setFocusedPostId(null); }
         }} 
       />
     </AppLayout>
