@@ -888,7 +888,6 @@ app.post('/api/feed', async (req, res) => {
         if (tag.type === 'department') users?.filter(u => u.DepartmentId === tag.id).forEach(u => impactedUserIds.add(u.Id));
         if (tag.type === 'group') users?.filter(u => u.GroupId === tag.id).forEach(u => impactedUserIds.add(u.Id));
       });
-      impactedUserIds.delete(resData[0].AuthorId);
 
       for (let uid of impactedUserIds) {
         let nLink = '/feed';
